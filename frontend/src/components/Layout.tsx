@@ -1,9 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   HomeIcon,
-  DocumentTextIcon,
   ChartBarIcon,
-  ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline';
 
 interface LayoutProps {

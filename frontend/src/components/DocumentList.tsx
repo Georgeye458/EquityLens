@@ -15,7 +15,13 @@ interface DocumentListProps {
   isLoading?: boolean;
 }
 
-const statusConfig = {
+const statusConfig: Record<string, {
+  icon: typeof ClockIcon;
+  color: string;
+  bg: string;
+  label: string;
+  animate?: boolean;
+}> = {
   pending: {
     icon: ClockIcon,
     color: 'text-yellow-500',

@@ -45,7 +45,7 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
 
     switch (output_type) {
       case 'value':
-        return <span className="font-medium text-gray-900">{String(value)}</span>;
+        return <span className="font-medium text-gray-900">{value !== null && value !== undefined ? String(value) : ''}</span>;
 
       case 'value_delta':
         if (typeof value === 'object' && value !== null) {

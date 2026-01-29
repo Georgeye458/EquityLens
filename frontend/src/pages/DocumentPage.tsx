@@ -14,7 +14,14 @@ import { useDocuments } from '../context/DocumentContext';
 import { usePolling } from '../hooks/usePolling';
 import LoadingSpinner from '../components/LoadingSpinner';
 
-const statusConfig = {
+const statusConfig: Record<string, {
+  icon: typeof ClockIcon;
+  color: string;
+  bg: string;
+  label: string;
+  description: string;
+  animate?: boolean;
+}> = {
   pending: {
     icon: ClockIcon,
     color: 'text-yellow-500',

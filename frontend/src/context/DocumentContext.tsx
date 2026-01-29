@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import type { Document, DocumentListResponse } from '../types';
 import { documentsApi } from '../lib/api';
 
