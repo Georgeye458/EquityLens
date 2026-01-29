@@ -56,7 +56,7 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
                 <span className="font-semibold text-gray-900">
                   {v.current !== undefined ? String(v.current) : '-'}
                 </span>
-                {v.unit && <span className="text-xs text-gray-500">{String(v.unit)}</span>}
+                {v.unit ? <span className="text-xs text-gray-500">{String(v.unit)}</span> : null}
               </div>
               {v.change_percent !== undefined && (
                 <span
