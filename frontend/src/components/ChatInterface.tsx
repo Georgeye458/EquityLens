@@ -6,6 +6,7 @@ import {
   SparklesIcon,
 } from '@heroicons/react/24/outline';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { ChatMessage, CitationDetail } from '../types';
 
 interface ChatInterfaceProps {
@@ -65,7 +66,7 @@ export default function ChatInterface({
   ];
 
   return (
-    <div className="flex flex-col h-[600px] card overflow-hidden">
+    <div className="flex flex-col h-[700px] card overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center">
@@ -114,8 +115,8 @@ export default function ChatInterface({
               }`}
             >
               <div
-                className={`flex max-w-[80%] ${
-                  message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                className={`flex ${
+                  message.role === 'user' ? 'max-w-[80%] flex-row-reverse' : 'max-w-[95%] flex-row'
                 }`}
               >
                 {/* Avatar */}
@@ -138,14 +139,16 @@ export default function ChatInterface({
                   className={`rounded-2xl px-4 py-3 ${
                     message.role === 'user'
                       ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-900'
+                      : 'bg-gray-50 text-gray-900 shadow-sm border border-gray-200'
                   }`}
                 >
                   {message.role === 'user' ? (
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   ) : (
-                    <div className="prose prose-sm max-w-none">
-                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                    <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-headings:font-semibold prose-h3:text-base prose-h4:text-sm prose-table:text-xs prose-th:bg-gray-100 prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-th:border prose-th:border-gray-300 prose-td:px-3 prose-td:py-2 prose-td:border prose-td:border-gray-200 prose-table:border-collapse prose-table:w-full prose-table:overflow-x-auto">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {message.content}
+                      </ReactMarkdown>
                     </div>
                   )}
 
