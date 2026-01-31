@@ -1,7 +1,8 @@
 """Application configuration using pydantic-settings."""
 
 from functools import lru_cache
-from typing import List
+from typing import List, Union
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,12 +26,16 @@ class Settings(BaseSettings):
 
     # Application
     debug: bool = False
-    allowed_origins: List[str] = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://equitylens-frontend.herokuapp.com",
-    ]
+    allowed_origins: Union[List[str], str] = "http://localhost:5173,http://localhost:3000"
     secret_key: str = "change-me-in-production"
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, v):
+        """Parse allowed_origins from comma-separated string or list."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # Document Processing
     max_file_size_mb: int = 50
