@@ -199,6 +199,41 @@ async def get_document(
     return document
 
 
+@router.patch("/{document_id}", response_model=DocumentResponse)
+async def update_document(
+    document_id: int,
+    company_name: Optional[str] = Form(None),
+    company_ticker: Optional[str] = Form(None),
+    document_type: Optional[str] = Form(None),
+    reporting_period: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update document metadata."""
+    result = await db.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    document = result.scalar_one_or_none()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # Update fields if provided
+    if company_name is not None:
+        document.company_name = company_name
+    if company_ticker is not None:
+        document.company_ticker = company_ticker
+    if document_type is not None:
+        document.document_type = document_type
+    if reporting_period is not None:
+        document.reporting_period = reporting_period
+
+    document.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(document)
+
+    return document
+
+
 @router.delete("/{document_id}")
 async def delete_document(
     document_id: int,

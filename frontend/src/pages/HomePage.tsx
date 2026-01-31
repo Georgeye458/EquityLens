@@ -11,6 +11,7 @@ export default function HomePage() {
     fetchDocuments,
     uploadDocument,
     deleteDocument,
+    updateDocumentInList,
     clearError,
   } = useDocuments();
 
@@ -98,6 +99,7 @@ export default function HomePage() {
           <DocumentList
             documents={documents}
             onDelete={handleDelete}
+            onUpdate={updateDocumentInList}
             isLoading={isLoading}
           />
         </div>

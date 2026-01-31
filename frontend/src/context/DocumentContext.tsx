@@ -18,6 +18,7 @@ interface DocumentContextType {
   }) => Promise<Document>;
   deleteDocument: (id: number) => Promise<void>;
   refreshDocument: (id: number) => Promise<void>;
+  updateDocumentInList: (doc: Document) => void;
   clearError: () => void;
 }
 
@@ -116,6 +117,13 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const updateDocumentInList = useCallback((doc: Document) => {
+    setDocuments(prev => prev.map(d => d.id === doc.id ? doc : d));
+    if (selectedDocument?.id === doc.id) {
+      setSelectedDocument(doc);
+    }
+  }, [selectedDocument]);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -133,6 +141,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         uploadDocument,
         deleteDocument,
         refreshDocument,
+        updateDocumentInList,
         clearError,
       }}
     >

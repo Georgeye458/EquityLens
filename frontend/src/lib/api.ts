@@ -89,6 +89,39 @@ export const documentsApi = {
     }
   },
 
+  update: async (
+    id: number,
+    metadata: {
+      company_name?: string;
+      company_ticker?: string;
+      document_type?: string;
+      reporting_period?: string;
+    }
+  ): Promise<Document> => {
+    try {
+      const formData = new FormData();
+      if (metadata.company_name !== undefined) {
+        formData.append('company_name', metadata.company_name);
+      }
+      if (metadata.company_ticker !== undefined) {
+        formData.append('company_ticker', metadata.company_ticker);
+      }
+      if (metadata.document_type !== undefined) {
+        formData.append('document_type', metadata.document_type);
+      }
+      if (metadata.reporting_period !== undefined) {
+        formData.append('reporting_period', metadata.reporting_period);
+      }
+
+      const response = await api.patch(`/documents/${id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return response.data;
+    } catch (error) {
+      throw handleError(error as AxiosError<ApiError>);
+    }
+  },
+
   getStatus: async (id: number): Promise<{
     id: number;
     status: string;
