@@ -29,15 +29,26 @@ Base = declarative_base()
 
 async def init_db():
     """Initialize database tables."""
+    from sqlalchemy import text
+    
     async with engine.begin() as conn:
         # Enable pgvector extension if available
         try:
-            await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         except Exception:
             pass  # Extension might not be available
         
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Run migrations for new columns
+        # Add document_ids column to chat_sessions if it doesn't exist
+        try:
+            await conn.execute(text(
+                "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS document_ids JSON"
+            ))
+        except Exception:
+            pass  # Column might already exist or table doesn't exist yet
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
