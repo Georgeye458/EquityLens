@@ -18,6 +18,7 @@ import { documentsApi } from '../lib/api';
 interface DocumentListProps {
   documents: Document[];
   onDelete?: (id: number) => void;
+  onBulkDelete?: (ids: number[]) => Promise<void>;
   onUpdate?: (doc: Document) => void;
   isLoading?: boolean;
 }
@@ -81,7 +82,7 @@ interface EditState {
   reporting_period: string;
 }
 
-export default function DocumentList({ documents, onDelete, onUpdate, isLoading }: DocumentListProps) {
+export default function DocumentList({ documents, onDelete, onBulkDelete, onUpdate, isLoading }: DocumentListProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editState, setEditState] = useState<EditState>({
     company_name: '',
@@ -91,17 +92,88 @@ export default function DocumentList({ documents, onDelete, onUpdate, isLoading 
   });
   const [isSaving, setIsSaving] = useState(false);
   const [retryingId, setRetryingId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkRetrying, setIsBulkRetrying] = useState(false);
 
   const handleRetry = async (doc: Document) => {
     setRetryingId(doc.id);
     try {
       await documentsApi.reprocess(doc.id);
-      // Update local state to show pending
       onUpdate?.({ ...doc, status: 'pending', error_message: null });
     } catch (error) {
       console.error('Failed to reprocess document:', error);
     }
     setRetryingId(null);
+  };
+
+  const handleBulkRetry = async () => {
+    setIsBulkRetrying(true);
+    const retryableIds = Array.from(selectedIds).filter(id => {
+      const doc = documents.find(d => d.id === id);
+      return doc && (doc.status === 'failed' || doc.status === 'processing');
+    });
+
+    for (const id of retryableIds) {
+      try {
+        await documentsApi.reprocess(id);
+        const doc = documents.find(d => d.id === id);
+        if (doc) {
+          onUpdate?.({ ...doc, status: 'pending', error_message: null });
+        }
+      } catch (error) {
+        console.error(`Failed to reprocess document ${id}:`, error);
+      }
+    }
+
+    setSelectedIds(new Set());
+    setIsBulkRetrying(false);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!onBulkDelete && !onDelete) return;
+    
+    const idsToDelete = Array.from(selectedIds);
+    if (idsToDelete.length === 0) return;
+
+    const confirmMsg = idsToDelete.length === 1
+      ? 'Are you sure you want to delete this document?'
+      : `Are you sure you want to delete ${idsToDelete.length} documents?`;
+    
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsBulkDeleting(true);
+
+    if (onBulkDelete) {
+      await onBulkDelete(idsToDelete);
+    } else if (onDelete) {
+      for (const id of idsToDelete) {
+        await onDelete(id);
+      }
+    }
+
+    setSelectedIds(new Set());
+    setIsBulkDeleting(false);
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === documents.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(documents.map(d => d.id)));
+    }
   };
 
   const startEditing = (doc: Document) => {
@@ -143,6 +215,12 @@ export default function DocumentList({ documents, onDelete, onUpdate, isLoading 
     setIsSaving(false);
   };
 
+  // Count retryable documents in selection
+  const retryableCount = Array.from(selectedIds).filter(id => {
+    const doc = documents.find(d => d.id === id);
+    return doc && (doc.status === 'failed' || doc.status === 'processing');
+  }).length;
+
   if (isLoading) {
     return (
       <div className="card p-8">
@@ -164,12 +242,70 @@ export default function DocumentList({ documents, onDelete, onUpdate, isLoading 
     );
   }
 
+  const allSelected = selectedIds.size === documents.length;
+  const someSelected = selectedIds.size > 0;
+
   return (
     <div className="card overflow-hidden">
+      {/* Header with select all and bulk actions */}
       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <h3 className="text-sm font-medium text-gray-700">
-          {documents.length} Document{documents.length !== 1 ? 's' : ''}
-        </h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someSelected && !allSelected;
+              }}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+            />
+            <h3 className="text-sm font-medium text-gray-700">
+              {someSelected 
+                ? `${selectedIds.size} selected`
+                : `${documents.length} Document${documents.length !== 1 ? 's' : ''}`
+              }
+            </h3>
+          </div>
+
+          {/* Bulk actions */}
+          {someSelected && (
+            <div className="flex items-center space-x-2">
+              {retryableCount > 0 && (
+                <button
+                  onClick={handleBulkRetry}
+                  disabled={isBulkRetrying}
+                  className="flex items-center text-xs px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50"
+                >
+                  {isBulkRetrying ? (
+                    <ArrowPathIcon className="w-3 h-3 mr-1 animate-spin" />
+                  ) : (
+                    <ArrowUturnLeftIcon className="w-3 h-3 mr-1" />
+                  )}
+                  Retry ({retryableCount})
+                </button>
+              )}
+              <button
+                onClick={handleBulkDelete}
+                disabled={isBulkDeleting}
+                className="flex items-center text-xs px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50"
+              >
+                {isBulkDeleting ? (
+                  <ArrowPathIcon className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <TrashIcon className="w-3 h-3 mr-1" />
+                )}
+                Delete ({selectedIds.size})
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-gray-500 hover:text-gray-700 px-2"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       
       <ul className="divide-y divide-gray-200">
@@ -177,9 +313,13 @@ export default function DocumentList({ documents, onDelete, onUpdate, isLoading 
           const status = statusConfig[doc.status];
           const StatusIcon = status.icon;
           const isEditing = editingId === doc.id;
+          const isSelected = selectedIds.has(doc.id);
           
           return (
-            <li key={doc.id} className="hover:bg-gray-50 transition-colors">
+            <li 
+              key={doc.id} 
+              className={`transition-colors ${isSelected ? 'bg-primary-50' : 'hover:bg-gray-50'}`}
+            >
               <div className="px-4 py-4">
                 {isEditing ? (
                   /* Edit mode */
@@ -262,6 +402,16 @@ export default function DocumentList({ documents, onDelete, onUpdate, isLoading 
                 ) : (
                   /* View mode */
                   <div className="flex items-center">
+                    {/* Checkbox */}
+                    <div className="flex-shrink-0 mr-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(doc.id)}
+                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                    </div>
+
                     {/* Document icon */}
                     <div className="flex-shrink-0">
                       <div className={`w-10 h-10 ${status.bg} rounded-lg flex items-center justify-center`}>

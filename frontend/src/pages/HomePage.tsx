@@ -37,6 +37,12 @@ export default function HomePage() {
     }
   };
 
+  const handleBulkDelete = async (ids: number[]) => {
+    for (const id of ids) {
+      await deleteDocument(id);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Hero section */}
@@ -99,6 +105,7 @@ export default function HomePage() {
           <DocumentList
             documents={documents}
             onDelete={handleDelete}
+            onBulkDelete={handleBulkDelete}
             onUpdate={updateDocumentInList}
             isLoading={isLoading}
           />
