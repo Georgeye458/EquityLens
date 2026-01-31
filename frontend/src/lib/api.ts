@@ -227,10 +227,14 @@ export const analysisApi = {
 
 // Chat API
 export const chatApi = {
-  createSession: async (documentId: number, title?: string): Promise<ChatSession> => {
+  createSession: async (
+    documentIds: number | number[],
+    title?: string
+  ): Promise<ChatSession> => {
     try {
+      const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
       const response = await api.post('/chat/sessions', {
-        document_id: documentId,
+        document_ids: ids,
         title,
       });
       return response.data;
@@ -285,6 +289,23 @@ export const chatApi = {
         { content },
         { params: { model } }
       );
+      return response.data;
+    } catch (error) {
+      throw handleError(error as AxiosError<ApiError>);
+    }
+  },
+
+  quickChatMulti: async (
+    documentIds: number[],
+    content: string,
+    model: string = 'llama-4'
+  ): Promise<ChatResponse> => {
+    try {
+      const response = await api.post('/chat/quick-multi', {
+        document_ids: documentIds,
+        content,
+        model,
+      });
       return response.data;
     } catch (error) {
       throw handleError(error as AxiosError<ApiError>);

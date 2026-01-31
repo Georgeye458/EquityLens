@@ -52,7 +52,7 @@ export default function ChatInterface({
   const renderCitation = (citation: CitationDetail) => (
     <span className="citation" title={citation.text}>
       <DocumentTextIcon className="w-3 h-3 mr-1" />
-      p.{citation.page_number}
+      {citation.document_name ? `${citation.document_name} - ` : ''}p.{citation.page_number}
     </span>
   );
 

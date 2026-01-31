@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage'
 import DocumentPage from './pages/DocumentPage'
 import AnalysisPage from './pages/AnalysisPage'
 import ChatPage from './pages/ChatPage'
+import MultiDocChatPage from './pages/MultiDocChatPage'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
           <Route path="/documents/:id" element={<DocumentPage />} />
           <Route path="/documents/:id/analysis" element={<AnalysisPage />} />
           <Route path="/documents/:id/chat" element={<ChatPage />} />
+          <Route path="/chat" element={<MultiDocChatPage />} />
         </Routes>
       </Layout>
     </DocumentProvider>

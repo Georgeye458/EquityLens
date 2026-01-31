@@ -1,7 +1,7 @@
 """Chat service for document Q&A with full context access."""
 
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from datetime import datetime
 
 from sqlalchemy import select
@@ -14,56 +14,88 @@ from app.services.vector_store import vector_store
 
 logger = logging.getLogger(__name__)
 
-# Chat system prompt emphasizing full document access
+# Chat system prompt emphasizing full document access and multi-document support
 CHAT_SYSTEM_PROMPT = """You are EquityLens, an AI assistant specialized in analyzing earnings reports and financial documents.
 
 CRITICAL: You have access to the FULL source documents through the provided context. Your responses should be based on the complete document content, not just pre-extracted summaries.
 
 Guidelines:
 1. Answer questions thoroughly using information from the provided document chunks
-2. ALWAYS cite your sources with page numbers in this format: [Page X]
-3. If information is found in multiple places, cite all relevant pages
-4. If you're uncertain about something, say so rather than guessing
-5. For numerical data, quote the exact figures from the document
-6. Distinguish between direct quotes and your interpretation
-7. If the question cannot be answered from the provided context, say so clearly
+2. ALWAYS cite your sources with document and page in this format: [TICKER - Page X] (e.g., [WBC - Page 15])
+3. When comparing across documents, clearly indicate which document each piece of information comes from
+4. If information is found in multiple places, cite all relevant sources
+5. If you're uncertain about something, say so rather than guessing
+6. For numerical data, quote the exact figures from the document
+7. Distinguish between direct quotes and your interpretation
+8. If the question cannot be answered from the provided context, say so clearly
 
 When citing:
-- Use [Page X] for single page references
-- Use [Pages X-Y] for ranges
+- Use [TICKER - Page X] for single page references (e.g., [WBC - Page 15])
+- Use [TICKER - Pages X-Y] for ranges
 - Include brief quotes when particularly relevant
 
 Remember: Users trust you for accurate, well-cited analysis. Quality and traceability are paramount."""
 
 
 class ChatService:
-    """Service for document chat with RAG."""
+    """Service for document chat with RAG - supports multiple documents."""
 
     async def create_session(
         self,
         db: AsyncSession,
-        document_id: int,
+        document_id: Optional[int] = None,
+        document_ids: Optional[List[int]] = None,
         title: Optional[str] = None,
     ) -> ChatSession:
-        """Create a new chat session for a document."""
-        # Verify document exists
+        """Create a new chat session for one or more documents."""
+        # Normalize to list
+        if document_ids is None and document_id is not None:
+            document_ids = [document_id]
+        
+        if not document_ids:
+            raise ValueError("At least one document ID is required")
+        
+        # Verify all documents exist and are processed
         result = await db.execute(
-            select(Document).where(Document.id == document_id)
+            select(Document).where(Document.id.in_(document_ids))
         )
-        document = result.scalar_one_or_none()
-
-        if not document:
-            raise ValueError(f"Document {document_id} not found")
-
+        documents = result.scalars().all()
+        
+        if len(documents) != len(document_ids):
+            found_ids = {d.id for d in documents}
+            missing = set(document_ids) - found_ids
+            raise ValueError(f"Documents not found: {missing}")
+        
+        # Build title from company names
+        if title is None:
+            company_names = [d.company_ticker or d.company_name for d in documents]
+            if len(company_names) == 1:
+                title = f"Chat: {company_names[0]}"
+            else:
+                title = f"Chat: {', '.join(company_names[:3])}" + ("..." if len(company_names) > 3 else "")
+        
         session = ChatSession(
-            document_id=document_id,
-            title=title or f"Chat: {document.company_name}",
+            document_id=document_ids[0] if len(document_ids) == 1 else None,
+            document_ids=document_ids,
+            title=title,
         )
         db.add(session)
         await db.commit()
         await db.refresh(session)
 
         return session
+    
+    async def _get_document_info(
+        self,
+        db: AsyncSession,
+        document_ids: List[int],
+    ) -> Dict[int, Document]:
+        """Get document info for multiple documents."""
+        result = await db.execute(
+            select(Document).where(Document.id.in_(document_ids))
+        )
+        docs = result.scalars().all()
+        return {d.id: d for d in docs}
 
     async def get_session(
         self,
@@ -121,29 +153,58 @@ class ChatService:
         )
         db.add(user_msg)
 
-        # Retrieve relevant chunks from FULL document (per requirements)
-        retrieved = await vector_store.search(
-            db=db,
-            query=user_message,
-            document_id=session.document_id,
-            top_k=10,  # Get more chunks for comprehensive context
-        )
+        # Get document IDs from session
+        document_ids = session.get_document_ids()
+        
+        if not document_ids:
+            raise ValueError("No documents associated with this session")
+        
+        # Get document info for citations
+        doc_info = await self._get_document_info(db, document_ids)
 
-        # Build context from retrieved chunks
+        # Retrieve relevant chunks - use multi-document search if multiple docs
+        if len(document_ids) == 1:
+            retrieved = await vector_store.search(
+                db=db,
+                query=user_message,
+                document_id=document_ids[0],
+                top_k=10,
+            )
+        else:
+            # Search across multiple documents
+            retrieved = await vector_store.search_multiple_documents(
+                db=db,
+                query=user_message,
+                document_ids=document_ids,
+                top_k=15,  # Get more when searching multiple docs
+            )
+
+        # Build context from retrieved chunks with document identifiers
         context_parts = []
         citations = []
 
         for chunk, score in retrieved:
+            doc = doc_info.get(chunk.document_id)
+            doc_label = doc.company_ticker or doc.company_name if doc else f"Doc {chunk.document_id}"
+            
             context_parts.append(
-                f"[Page {chunk.page_number}]\n{chunk.content}"
+                f"[{doc_label} - Page {chunk.page_number}]\n{chunk.content}"
             )
             citations.append({
                 "page_number": chunk.page_number,
                 "text": chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
                 "relevance_score": score,
+                "document_id": chunk.document_id,
+                "document_name": doc_label,
             })
 
         context = "\n\n---\n\n".join(context_parts)
+        
+        # Build document list for context
+        doc_list = ", ".join([
+            doc_info[did].company_ticker or doc_info[did].company_name 
+            for did in document_ids if did in doc_info
+        ])
 
         # Get conversation history
         history = await self.get_session_messages(db, session_id)
@@ -157,9 +218,11 @@ class ChatService:
             })
 
         # Add current query with context
+        context_intro = f"Context from documents ({doc_list}):" if len(document_ids) > 1 else "Context from the document:"
+        
         messages.append({
             "role": "user",
-            "content": f"""Context from the document:
+            "content": f"""{context_intro}
 
 {context}
 
@@ -167,7 +230,7 @@ class ChatService:
 
 Question: {user_message}
 
-Please provide a thorough answer with page citations.""",
+Please provide a thorough answer with citations in the format [TICKER - Page X].""",
         })
 
         # Generate response
@@ -187,7 +250,7 @@ Please provide a thorough answer with page citations.""",
             role="assistant",
             content=response,
             citations=response_citations,
-            retrieved_chunks=[c["page_number"] for c in citations],
+            retrieved_chunks=[{"document_id": c["document_id"], "page": c["page_number"]} for c in citations],
         )
         db.add(assistant_msg)
 

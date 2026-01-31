@@ -3,6 +3,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,31 +28,43 @@ async def create_chat_session(
     session_data: ChatSessionCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new chat session for a document."""
-    # Verify document exists and is processed
+    """Create a new chat session for one or more documents."""
+    # Get document IDs - support both single and multiple
+    document_ids = session_data.document_ids or ([session_data.document_id] if session_data.document_id else [])
+    
+    if not document_ids:
+        raise HTTPException(status_code=400, detail="At least one document ID is required")
+    
+    # Verify all documents exist and are processed
     result = await db.execute(
-        select(Document).where(Document.id == session_data.document_id)
+        select(Document).where(Document.id.in_(document_ids))
     )
-    document = result.scalar_one_or_none()
-
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    if document.status != ProcessingStatus.COMPLETED.value:
+    documents = list(result.scalars().all())
+    
+    if len(documents) != len(document_ids):
+        found_ids = {d.id for d in documents}
+        missing = set(document_ids) - found_ids
+        raise HTTPException(status_code=404, detail=f"Documents not found: {missing}")
+    
+    # Check all documents are processed
+    not_processed = [d for d in documents if d.status != ProcessingStatus.COMPLETED.value]
+    if not_processed:
+        names = [d.filename for d in not_processed]
         raise HTTPException(
             status_code=400,
-            detail="Document must be processed before starting a chat",
+            detail=f"Documents must be processed before starting a chat: {names}",
         )
 
     session = await chat_service.create_session(
         db=db,
-        document_id=session_data.document_id,
+        document_ids=document_ids,
         title=session_data.title,
     )
 
     return ChatSessionResponse(
         id=session.id,
         document_id=session.document_id,
+        document_ids=session.document_ids,
         title=session.title,
         created_at=session.created_at,
         updated_at=session.updated_at,
@@ -75,6 +88,7 @@ async def get_chat_session(
     return ChatSessionResponse(
         id=session.id,
         document_id=session.document_id,
+        document_ids=session.document_ids,
         title=session.title,
         created_at=session.created_at,
         updated_at=session.updated_at,
@@ -96,6 +110,7 @@ async def get_document_sessions(
         result.append(ChatSessionResponse(
             id=session.id,
             document_id=session.document_id,
+            document_ids=session.document_ids,
             title=session.title,
             created_at=session.created_at,
             updated_at=session.updated_at,
@@ -174,7 +189,7 @@ async def quick_chat(
     else:
         session = await chat_service.create_session(
             db=db,
-            document_id=document_id,
+            document_ids=[document_id],
             title="Quick Chat",
         )
 
@@ -184,6 +199,52 @@ async def quick_chat(
             session_id=session.id,
             user_message=message.content,
             model=model,
+        )
+
+        return ChatResponse(
+            message=ChatMessageResponse.model_validate(assistant_msg),
+            session_id=session.id,
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
+
+
+class MultiDocChatRequest(BaseModel):
+    """Request for multi-document quick chat."""
+    document_ids: List[int]
+    content: str
+    model: str = "llama-4"
+
+
+@router.post("/quick-multi", response_model=ChatResponse)
+async def quick_chat_multi(
+    request: MultiDocChatRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Quick multi-document chat - creates a session for multiple documents.
+
+    Useful for comparing or analyzing across documents.
+    """
+    if not request.document_ids:
+        raise HTTPException(status_code=400, detail="At least one document ID required")
+    
+    # Always create a new session for multi-document queries
+    session = await chat_service.create_session(
+        db=db,
+        document_ids=request.document_ids,
+        title="Multi-Document Chat",
+    )
+
+    try:
+        user_msg, assistant_msg = await chat_service.send_message(
+            db=db,
+            session_id=session.id,
+            user_message=request.content,
+            model=request.model,
         )
 
         return ChatResponse(

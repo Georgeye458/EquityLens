@@ -8,7 +8,7 @@ interface UseChatReturn {
   isLoading: boolean;
   isSending: boolean;
   error: string | null;
-  createSession: (documentId: number, title?: string) => Promise<ChatSession>;
+  createSession: (documentIds: number | number[], title?: string) => Promise<ChatSession>;
   loadSession: (sessionId: number) => Promise<void>;
   loadDocumentSessions: (documentId: number) => Promise<ChatSession[]>;
   sendMessage: (content: string, model?: string) => Promise<void>;
@@ -22,12 +22,12 @@ export function useChat(): UseChatReturn {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const createSession = useCallback(async (documentId: number, title?: string): Promise<ChatSession> => {
+  const createSession = useCallback(async (documentIds: number | number[], title?: string): Promise<ChatSession> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const newSession = await chatApi.createSession(documentId, title);
+      const newSession = await chatApi.createSession(documentIds, title);
       setSession(newSession);
       setMessages([]);
       return newSession;

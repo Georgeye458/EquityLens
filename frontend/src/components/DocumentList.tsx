@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   DocumentTextIcon,
   ClockIcon,
@@ -11,6 +11,8 @@ import {
   CheckIcon,
   XMarkIcon,
   ArrowUturnLeftIcon,
+  ChatBubbleLeftRightIcon,
+  ChartBarIcon,
 } from '@heroicons/react/24/outline';
 import type { Document } from '../types';
 import { documentsApi } from '../lib/api';
@@ -83,6 +85,7 @@ interface EditState {
 }
 
 export default function DocumentList({ documents, onDelete, onBulkDelete, onUpdate, isLoading }: DocumentListProps) {
+  const navigate = useNavigate();
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editState, setEditState] = useState<EditState>({
     company_name: '',
@@ -95,6 +98,27 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkRetrying, setIsBulkRetrying] = useState(false);
+
+  // Count completed documents in selection (for chat/analyze)
+  const completedSelectedIds = Array.from(selectedIds).filter(id => {
+    const doc = documents.find(d => d.id === id);
+    return doc && doc.status === 'completed';
+  });
+  const completedCount = completedSelectedIds.length;
+
+  const handleChatWithSelected = () => {
+    if (completedCount === 0) return;
+    // Navigate to multi-doc chat with selected IDs
+    const idsParam = completedSelectedIds.join(',');
+    navigate(`/chat?documents=${idsParam}`);
+  };
+
+  const handleAnalyzeSelected = () => {
+    if (completedCount === 0) return;
+    // Navigate to comparison/analysis page with selected IDs
+    const idsParam = completedSelectedIds.join(',');
+    navigate(`/compare?documents=${idsParam}`);
+  };
 
   const handleRetry = async (doc: Document) => {
     setRetryingId(doc.id);
@@ -271,6 +295,26 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
           {/* Bulk actions */}
           {someSelected && (
             <div className="flex items-center space-x-2">
+              {/* Chat with selected - only for completed docs */}
+              {completedCount > 0 && (
+                <button
+                  onClick={handleChatWithSelected}
+                  className="flex items-center text-xs px-3 py-1.5 bg-primary-100 text-primary-700 rounded-lg hover:bg-primary-200"
+                >
+                  <ChatBubbleLeftRightIcon className="w-3 h-3 mr-1" />
+                  Chat ({completedCount})
+                </button>
+              )}
+              {/* Analyze selected - only for completed docs */}
+              {completedCount > 1 && (
+                <button
+                  onClick={handleAnalyzeSelected}
+                  className="flex items-center text-xs px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                >
+                  <ChartBarIcon className="w-3 h-3 mr-1" />
+                  Compare ({completedCount})
+                </button>
+              )}
               {retryableCount > 0 && (
                 <button
                   onClick={handleBulkRetry}

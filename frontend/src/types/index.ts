@@ -81,7 +81,8 @@ export interface POIsByCategory {
 // Chat types
 export interface ChatSession {
   id: number;
-  document_id: number;
+  document_id: number | null;  // Legacy single document
+  document_ids: number[] | null;  // New: multiple documents
   title: string | null;
   created_at: string;
   updated_at: string;
@@ -100,6 +101,8 @@ export interface CitationDetail {
   page_number: number;
   text: string;
   relevance_score?: number;
+  document_id?: number;
+  document_name?: string;  // e.g., "WBC" ticker
 }
 
 export interface ChatResponse {

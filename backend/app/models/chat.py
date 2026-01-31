@@ -21,11 +21,14 @@ class MessageRole(str, Enum):
 # SQLAlchemy Models
 
 class ChatSession(Base):
-    """Chat session for document analysis."""
+    """Chat session for document analysis - supports multiple documents."""
     __tablename__ = "chat_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    # Legacy single document field (kept for backward compatibility)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    # New: Support multiple documents as JSON array
+    document_ids = Column(JSON, nullable=True)  # List of document IDs
     
     title = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -33,6 +36,14 @@ class ChatSession(Base):
 
     # Relationships
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+    
+    def get_document_ids(self) -> List[int]:
+        """Get all document IDs for this session."""
+        if self.document_ids:
+            return self.document_ids
+        elif self.document_id:
+            return [self.document_id]
+        return []
 
 
 class ChatMessage(Base):
@@ -68,6 +79,8 @@ class CitationDetail(BaseModel):
     page_number: int
     text: str
     relevance_score: Optional[float] = None
+    document_id: Optional[int] = None
+    document_name: Optional[str] = None  # e.g., "WBC" or company ticker
 
 
 class ChatMessageResponse(BaseModel):
@@ -85,7 +98,8 @@ class ChatMessageResponse(BaseModel):
 class ChatSessionResponse(BaseModel):
     """Schema for chat session response."""
     id: int
-    document_id: int
+    document_id: Optional[int] = None  # Legacy single document
+    document_ids: Optional[List[int]] = None  # New: multiple documents
     title: Optional[str]
     created_at: datetime
     updated_at: datetime
@@ -97,7 +111,8 @@ class ChatSessionResponse(BaseModel):
 
 class ChatSessionCreate(BaseModel):
     """Schema for creating a chat session."""
-    document_id: int
+    document_id: Optional[int] = None  # Legacy single document
+    document_ids: Optional[List[int]] = None  # New: multiple documents
     title: Optional[str] = None
 
 
