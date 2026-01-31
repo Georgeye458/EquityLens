@@ -111,7 +111,7 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
     setIsBulkRetrying(true);
     const retryableIds = Array.from(selectedIds).filter(id => {
       const doc = documents.find(d => d.id === id);
-      return doc && (doc.status === 'failed' || doc.status === 'processing');
+      return doc && (doc.status === 'failed' || doc.status === 'processing' || doc.status === 'pending');
     });
 
     for (const id of retryableIds) {
@@ -215,10 +215,10 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
     setIsSaving(false);
   };
 
-  // Count retryable documents in selection
+  // Count retryable documents in selection (including pending)
   const retryableCount = Array.from(selectedIds).filter(id => {
     const doc = documents.find(d => d.id === id);
-    return doc && (doc.status === 'failed' || doc.status === 'processing');
+    return doc && (doc.status === 'failed' || doc.status === 'processing' || doc.status === 'pending');
   }).length;
 
   if (isLoading) {
@@ -477,19 +477,19 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
                           </Link>
                         </>
                       )}
-                      {(doc.status === 'failed' || doc.status === 'processing') && (
+                      {(doc.status === 'failed' || doc.status === 'processing' || doc.status === 'pending') && (
                         <button
                           onClick={() => handleRetry(doc)}
                           disabled={retryingId === doc.id}
                           className="flex items-center text-xs px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50"
-                          title="Retry processing"
+                          title={doc.status === 'pending' ? 'Start processing' : 'Retry processing'}
                         >
                           {retryingId === doc.id ? (
                             <ArrowPathIcon className="w-3 h-3 mr-1 animate-spin" />
                           ) : (
                             <ArrowUturnLeftIcon className="w-3 h-3 mr-1" />
                           )}
-                          Retry
+                          {doc.status === 'pending' ? 'Process' : 'Retry'}
                         </button>
                       )}
                       <button

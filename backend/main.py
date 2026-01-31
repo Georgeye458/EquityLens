@@ -3,6 +3,8 @@ EquityLens Backend - FastAPI Application
 AI-powered earnings report analysis tool
 """
 
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,15 +13,68 @@ from app.config import settings
 from app.routers import documents, analysis, chat
 from app.services.database import init_db
 
+logger = logging.getLogger(__name__)
+
+
+async def requeue_pending_documents():
+    """Requeue any documents that were pending/processing when server restarted."""
+    from sqlalchemy import select
+    from app.services.database import async_session
+    from app.services.processing_queue import processing_queue
+    from app.models.document import Document, ProcessingStatus
+    
+    try:
+        async with async_session() as db:
+            # Find documents that are pending or processing (stuck from previous run)
+            result = await db.execute(
+                select(Document).where(
+                    Document.status.in_([
+                        ProcessingStatus.PENDING.value,
+                        ProcessingStatus.PROCESSING.value,
+                    ])
+                ).order_by(Document.created_at)
+            )
+            stuck_docs = result.scalars().all()
+            
+            if stuck_docs:
+                logger.info(f"Found {len(stuck_docs)} documents to requeue on startup")
+                
+                for doc in stuck_docs:
+                    if doc.file_path:
+                        # Reset status to pending
+                        doc.status = ProcessingStatus.PENDING.value
+                        await db.commit()
+                        
+                        # Add to queue
+                        await processing_queue.add_document(doc.id, doc.file_path)
+                        logger.info(f"Requeued document {doc.id}: {doc.filename}")
+                
+            else:
+                logger.info("No pending documents to requeue on startup")
+                
+    except Exception as e:
+        logger.error(f"Error requeuing pending documents: {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown events."""
     # Startup
     await init_db()
+    
+    # Requeue any stuck documents after a short delay
+    # (allow time for database connection to stabilize)
+    asyncio.create_task(delayed_requeue())
+    
     yield
     # Shutdown
     pass
+
+
+async def delayed_requeue():
+    """Delay requeue slightly to ensure database is ready."""
+    await asyncio.sleep(2)
+    await requeue_pending_documents()
 
 
 app = FastAPI(
