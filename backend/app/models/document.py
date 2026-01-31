@@ -72,7 +72,7 @@ class DocumentChunk(Base):
     # Store embedding as JSON array (or use pgvector extension)
     embedding = Column(JSON, nullable=True)
     
-    metadata = Column(JSON, nullable=True)  # Additional chunk metadata
+    chunk_metadata = Column(JSON, nullable=True)  # Additional chunk metadata
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
