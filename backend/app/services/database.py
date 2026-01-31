@@ -49,6 +49,14 @@ async def init_db():
             ))
         except Exception:
             pass  # Column might already exist or table doesn't exist yet
+        
+        # Make document_id nullable (for multi-document sessions)
+        try:
+            await conn.execute(text(
+                "ALTER TABLE chat_sessions ALTER COLUMN document_id DROP NOT NULL"
+            ))
+        except Exception:
+            pass  # Constraint might already be dropped
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
