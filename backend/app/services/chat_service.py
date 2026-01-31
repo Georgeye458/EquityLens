@@ -37,6 +37,45 @@ When citing:
 Remember: Users trust you for accurate, well-cited analysis. Quality and traceability are paramount."""
 
 
+def get_document_label(doc: Document) -> str:
+    """Generate a distinctive label for a document based on ticker, period, and filename."""
+    parts = []
+    
+    # Start with ticker or abbreviated company name
+    if doc.company_ticker:
+        parts.append(doc.company_ticker)
+    else:
+        parts.append(doc.company_name[:10])
+    
+    # Add reporting period
+    if doc.reporting_period:
+        parts.append(doc.reporting_period)
+    elif doc.filename:
+        # Try to extract period from filename
+        fname = doc.filename.lower()
+        import re
+        # Match patterns like 3Q25, FY25, H1 2025, etc.
+        period_match = re.search(r'([1-4]q\d{2}|fy\d{2,4}|h[12]\s?\d{2,4})', fname)
+        if period_match:
+            parts.append(period_match.group(1).upper())
+    
+    # Add document type hint from filename if still not distinctive
+    if len(parts) < 2 and doc.filename:
+        fname = doc.filename.lower()
+        if 'pillar' in fname:
+            parts.append('Pillar3')
+        elif 'update' in fname:
+            parts.append('Update')
+        elif 'result' in fname:
+            parts.append('Results')
+        elif 'idp' in fname:
+            parts.append('IDP')
+        elif 'pro-forma' in fname or 'proforma' in fname:
+            parts.append('ProForma')
+    
+    return ' '.join(parts)
+
+
 class ChatService:
     """Service for document chat with RAG - supports multiple documents."""
 
@@ -66,13 +105,13 @@ class ChatService:
             missing = set(document_ids) - found_ids
             raise ValueError(f"Documents not found: {missing}")
         
-        # Build title from company names
+        # Build title from document labels
         if title is None:
-            company_names = [d.company_ticker or d.company_name for d in documents]
-            if len(company_names) == 1:
-                title = f"Chat: {company_names[0]}"
+            doc_labels = [get_document_label(d) for d in documents]
+            if len(doc_labels) == 1:
+                title = f"Chat: {doc_labels[0]}"
             else:
-                title = f"Chat: {', '.join(company_names[:3])}" + ("..." if len(company_names) > 3 else "")
+                title = f"Chat: {', '.join(doc_labels[:3])}" + ("..." if len(doc_labels) > 3 else "")
         
         session = ChatSession(
             document_id=document_ids[0] if len(document_ids) == 1 else None,
@@ -185,7 +224,7 @@ class ChatService:
 
         for chunk, score in retrieved:
             doc = doc_info.get(chunk.document_id)
-            doc_label = doc.company_ticker or doc.company_name if doc else f"Doc {chunk.document_id}"
+            doc_label = get_document_label(doc) if doc else f"Doc {chunk.document_id}"
             
             context_parts.append(
                 f"[{doc_label} - Page {chunk.page_number}]\n{chunk.content}"
@@ -202,7 +241,7 @@ class ChatService:
         
         # Build document list for context
         doc_list = ", ".join([
-            doc_info[did].company_ticker or doc_info[did].company_name 
+            get_document_label(doc_info[did])
             for did in document_ids if did in doc_info
         ])
 

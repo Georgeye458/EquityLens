@@ -11,6 +11,28 @@ import ChatInterface from '../components/ChatInterface';
 import LoadingSpinner from '../components/LoadingSpinner';
 import type { Document } from '../types';
 
+// Helper to create a distinctive document label
+function getDocumentLabel(doc: Document): string {
+  const ticker = doc.company_ticker || doc.company_name.slice(0, 3).toUpperCase();
+  const parts = [ticker];
+  
+  if (doc.reporting_period) {
+    parts.push(doc.reporting_period);
+  }
+  
+  // Add document type hint from filename if no period
+  if (!doc.reporting_period && doc.filename) {
+    // Extract keywords from filename
+    const fname = doc.filename.toLowerCase();
+    if (fname.includes('pillar')) parts.push('Pillar 3');
+    else if (fname.includes('update')) parts.push('Update');
+    else if (fname.includes('result')) parts.push('Results');
+    else if (fname.includes('idp')) parts.push('IDP');
+  }
+  
+  return parts.join(' ');
+}
+
 export default function MultiDocChatPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -70,7 +92,7 @@ export default function MultiDocChatPage() {
 
   // Build document names for display
   const documentNames = selectedDocs
-    .map(d => d.company_ticker || d.company_name)
+    .map(d => getDocumentLabel(d))
     .join(', ');
 
   if (documentIds.length === 0) {
@@ -149,12 +171,10 @@ export default function MultiDocChatPage() {
             <div
               key={doc.id}
               className="flex items-center px-3 py-1.5 bg-primary-50 text-primary-700 rounded-full text-sm"
+              title={doc.filename}
             >
               <DocumentTextIcon className="w-4 h-4 mr-1.5" />
-              {doc.company_ticker || doc.company_name}
-              {doc.reporting_period && (
-                <span className="ml-1 text-primary-500">({doc.reporting_period})</span>
-              )}
+              {getDocumentLabel(doc)}
             </div>
           ))}
         </div>

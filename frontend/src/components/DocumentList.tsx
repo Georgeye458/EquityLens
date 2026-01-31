@@ -84,6 +84,48 @@ interface EditState {
   reporting_period: string;
 }
 
+// Helper to create a distinctive document display name
+function getDocumentDisplayName(doc: Document): string {
+  const parts: string[] = [];
+  
+  // Start with ticker or company name
+  if (doc.company_ticker) {
+    parts.push(doc.company_ticker);
+  } else {
+    parts.push(doc.company_name);
+  }
+  
+  // Add reporting period if available
+  if (doc.reporting_period) {
+    parts.push(doc.reporting_period);
+  }
+  
+  // Add document type abbreviation
+  const typeAbbrev: Record<string, string> = {
+    annual_report: 'Annual',
+    half_year: 'H1',
+    quarterly: 'Quarterly',
+    asx_announcement: 'ASX',
+    investor_presentation: 'Presentation',
+    other: '',
+  };
+  const typeLabel = typeAbbrev[doc.document_type];
+  if (typeLabel) {
+    parts.push(typeLabel);
+  }
+  
+  return parts.join(' ');
+}
+
+// Get a short label for citations/tags
+function getDocumentShortLabel(doc: Document): string {
+  const ticker = doc.company_ticker || doc.company_name.slice(0, 3).toUpperCase();
+  if (doc.reporting_period) {
+    return `${ticker} ${doc.reporting_period}`;
+  }
+  return ticker;
+}
+
 export default function DocumentList({ documents, onDelete, onBulkDelete, onUpdate, isLoading }: DocumentListProps) {
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -469,19 +511,12 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
                         to={`/documents/${doc.id}`}
                         className="text-sm font-medium text-gray-900 hover:text-primary-600 truncate block"
                       >
-                        {doc.company_name}
-                        {doc.company_ticker && (
-                          <span className="ml-2 text-gray-500">({doc.company_ticker})</span>
-                        )}
+                        {getDocumentDisplayName(doc)}
                       </Link>
                       <div className="flex items-center mt-1 space-x-3 text-xs text-gray-500">
-                        <span>{documentTypeLabels[doc.document_type] || doc.document_type}</span>
-                        {doc.reporting_period && (
-                          <>
-                            <span>•</span>
-                            <span>{doc.reporting_period}</span>
-                          </>
-                        )}
+                        <span className="truncate max-w-[200px]" title={doc.filename}>
+                          {doc.filename}
+                        </span>
                         {doc.page_count && (
                           <>
                             <span>•</span>
