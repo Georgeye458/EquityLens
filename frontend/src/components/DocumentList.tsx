@@ -59,14 +59,6 @@ const statusConfig: Record<string, {
   },
 };
 
-const documentTypeLabels: Record<string, string> = {
-  annual_report: 'Annual Report',
-  half_year: 'Half-Year',
-  quarterly: 'Quarterly',
-  asx_announcement: 'ASX Announcement',
-  investor_presentation: 'Presentation',
-  other: 'Other',
-};
 
 const documentTypes = [
   { value: 'annual_report', label: 'Annual Report' },
@@ -117,14 +109,6 @@ function getDocumentDisplayName(doc: Document): string {
   return parts.join(' ');
 }
 
-// Get a short label for citations/tags
-function getDocumentShortLabel(doc: Document): string {
-  const ticker = doc.company_ticker || doc.company_name.slice(0, 3).toUpperCase();
-  if (doc.reporting_period) {
-    return `${ticker} ${doc.reporting_period}`;
-  }
-  return ticker;
-}
 
 export default function DocumentList({ documents, onDelete, onBulkDelete, onUpdate, isLoading }: DocumentListProps) {
   const navigate = useNavigate();
