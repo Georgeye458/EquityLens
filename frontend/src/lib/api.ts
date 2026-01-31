@@ -136,6 +136,32 @@ export const documentsApi = {
       throw handleError(error as AxiosError<ApiError>);
     }
   },
+
+  reprocess: async (id: number): Promise<{
+    message: string;
+    document_id: number;
+    queue_position: number;
+  }> => {
+    try {
+      const response = await api.post(`/documents/${id}/reprocess`);
+      return response.data;
+    } catch (error) {
+      throw handleError(error as AxiosError<ApiError>);
+    }
+  },
+
+  getQueueStatus: async (): Promise<{
+    queue_length: number;
+    is_processing: boolean;
+    current_document_id: number | null;
+  }> => {
+    try {
+      const response = await api.get('/documents/queue/status');
+      return response.data;
+    } catch (error) {
+      throw handleError(error as AxiosError<ApiError>);
+    }
+  },
 };
 
 // Analysis API

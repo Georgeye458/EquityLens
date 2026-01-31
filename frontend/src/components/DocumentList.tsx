@@ -10,6 +10,7 @@ import {
   PencilIcon,
   CheckIcon,
   XMarkIcon,
+  ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 import type { Document } from '../types';
 import { documentsApi } from '../lib/api';
@@ -89,6 +90,19 @@ export default function DocumentList({ documents, onDelete, onUpdate, isLoading 
     reporting_period: '',
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+
+  const handleRetry = async (doc: Document) => {
+    setRetryingId(doc.id);
+    try {
+      await documentsApi.reprocess(doc.id);
+      // Update local state to show pending
+      onUpdate?.({ ...doc, status: 'pending', error_message: null });
+    } catch (error) {
+      console.error('Failed to reprocess document:', error);
+    }
+    setRetryingId(null);
+  };
 
   const startEditing = (doc: Document) => {
     setEditingId(doc.id);
@@ -312,6 +326,21 @@ export default function DocumentList({ documents, onDelete, onUpdate, isLoading 
                             Chat
                           </Link>
                         </>
+                      )}
+                      {(doc.status === 'failed' || doc.status === 'processing') && (
+                        <button
+                          onClick={() => handleRetry(doc)}
+                          disabled={retryingId === doc.id}
+                          className="flex items-center text-xs px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50"
+                          title="Retry processing"
+                        >
+                          {retryingId === doc.id ? (
+                            <ArrowPathIcon className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <ArrowUturnLeftIcon className="w-3 h-3 mr-1" />
+                          )}
+                          Retry
+                        </button>
                       )}
                       <button
                         onClick={() => startEditing(doc)}
