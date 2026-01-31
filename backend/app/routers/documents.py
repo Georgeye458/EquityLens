@@ -10,8 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.database import get_db
-from app.services.document_processor import document_processor
-from app.services.vector_store import vector_store
+from app.services.processing_queue import processing_queue
 from app.models.document import (
     Document,
     DocumentCreate,
@@ -29,60 +28,8 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-async def process_document_background(
-    document_id: int,
-    file_path: str,
-):
-    """Background task to process uploaded document."""
-    from app.services.database import async_session
-
-    async with async_session() as db:
-        try:
-            # Get document
-            result = await db.execute(
-                select(Document).where(Document.id == document_id)
-            )
-            document = result.scalar_one_or_none()
-
-            if not document:
-                return
-
-            # Update status
-            document.status = ProcessingStatus.PROCESSING.value
-            await db.commit()
-
-            # Process PDF
-            processed = await document_processor.process_pdf(file_path)
-
-            # Update document metadata
-            document.page_count = processed["page_count"]
-
-            # Create chunks
-            chunks = document_processor.create_chunks(processed["pages"])
-
-            # Add chunks to vector store
-            await vector_store.add_chunks(db, document_id, chunks)
-
-            # Update status
-            document.status = ProcessingStatus.COMPLETED.value
-            document.processed_at = datetime.utcnow()
-            await db.commit()
-
-        except Exception as e:
-            # Mark as failed
-            result = await db.execute(
-                select(Document).where(Document.id == document_id)
-            )
-            document = result.scalar_one_or_none()
-            if document:
-                document.status = ProcessingStatus.FAILED.value
-                document.error_message = str(e)
-                await db.commit()
-
-
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     company_name: str = Form(...),
     company_ticker: Optional[str] = Form(None),
@@ -93,7 +40,7 @@ async def upload_document(
     """
     Upload a document for analysis.
 
-    The document will be processed in the background.
+    The document will be processed sequentially in a queue to manage memory.
     """
     # Validate file type
     if not file.filename.lower().endswith(".pdf"):
@@ -134,12 +81,8 @@ async def upload_document(
     await db.commit()
     await db.refresh(document)
 
-    # Start background processing
-    background_tasks.add_task(
-        process_document_background,
-        document.id,
-        file_path,
-    )
+    # Add to sequential processing queue (memory-safe)
+    await processing_queue.add_document(document.id, file_path)
 
     return document
 
@@ -280,3 +223,46 @@ async def get_document_status(
         "page_count": document.page_count,
         "processed_at": document.processed_at,
     }
+
+
+@router.post("/{document_id}/reprocess")
+async def reprocess_document(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reprocess a failed or stuck document."""
+    result = await db.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    document = result.scalar_one_or_none()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if document.status == ProcessingStatus.COMPLETED.value:
+        raise HTTPException(
+            status_code=400,
+            detail="Document is already processed successfully"
+        )
+
+    # Reset status and add to queue
+    document.status = ProcessingStatus.PENDING.value
+    document.error_message = None
+    await db.commit()
+
+    # Add to processing queue
+    await processing_queue.add_document(document.id, document.file_path)
+
+    queue_status = processing_queue.get_queue_status()
+
+    return {
+        "message": "Document queued for reprocessing",
+        "document_id": document.id,
+        "queue_position": queue_status["queue_length"],
+    }
+
+
+@router.get("/queue/status")
+async def get_queue_status():
+    """Get the current processing queue status."""
+    return processing_queue.get_queue_status()

@@ -1,5 +1,7 @@
 """Vector store service for document retrieval."""
 
+import gc
+import asyncio
 from typing import List, Dict, Any, Optional, Tuple
 import logging
 import numpy as np
@@ -66,6 +68,78 @@ class VectorStore:
         await db.commit()
 
         return db_chunks
+
+    async def add_chunks_memory_safe(
+        self,
+        db: AsyncSession,
+        document_id: int,
+        chunks: List[Dict[str, Any]],
+        batch_size: int = 10,
+    ) -> int:
+        """
+        Add document chunks with memory-conscious embedding generation.
+        
+        Processes chunks in small batches with garbage collection between
+        batches to minimize memory footprint.
+        
+        Args:
+            db: Database session
+            document_id: ID of the parent document
+            chunks: List of chunk dictionaries with content and metadata
+            batch_size: Number of chunks to process at once (smaller = less memory)
+            
+        Returns:
+            Number of chunks successfully processed
+        """
+        total_chunks = len(chunks)
+        processed_count = 0
+        
+        logger.info(f"Processing {total_chunks} chunks in batches of {batch_size}")
+        
+        for i in range(0, total_chunks, batch_size):
+            batch_chunks = chunks[i:i + batch_size]
+            batch_texts = [chunk["content"] for chunk in batch_chunks]
+            
+            try:
+                # Generate embeddings for this batch
+                logger.debug(f"Generating embeddings for batch {i // batch_size + 1}")
+                embeddings = await scx_client.create_embeddings(batch_texts)
+                
+                # Create and save chunk records
+                for chunk, embedding in zip(batch_chunks, embeddings):
+                    db_chunk = DocumentChunk(
+                        document_id=document_id,
+                        content=chunk["content"],
+                        page_number=chunk.get("page_number"),
+                        chunk_index=chunk["chunk_index"],
+                        embedding=embedding,
+                        chunk_metadata=chunk.get("metadata"),
+                    )
+                    db.add(db_chunk)
+                    processed_count += 1
+                
+                # Commit this batch
+                await db.commit()
+                
+                # Clear batch data and force garbage collection
+                del batch_texts
+                del embeddings
+                gc.collect()
+                
+                logger.info(f"Processed {min(i + batch_size, total_chunks)}/{total_chunks} chunks")
+                
+                # Small delay between batches to allow memory to settle
+                if i + batch_size < total_chunks:
+                    await asyncio.sleep(0.2)
+                    
+            except Exception as e:
+                logger.error(f"Error processing batch starting at {i}: {e}")
+                # Rollback this batch but continue with next
+                await db.rollback()
+                raise
+        
+        logger.info(f"Successfully processed {processed_count} chunks")
+        return processed_count
 
     async def search(
         self,
