@@ -1,26 +1,30 @@
-"""Sequential document processing queue to manage memory usage."""
+"""Sequential document processing queue with memory-optimized streaming."""
 
 import asyncio
 import gc
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from collections import deque
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.document import Document, ProcessingStatus
+from app.models.document import Document, DocumentChunk, ProcessingStatus
+from app.services.scx_client import scx_client
 
 logger = logging.getLogger(__name__)
+
+# Maximum memory-safe batch size for embeddings
+EMBEDDING_BATCH_SIZE = 5
 
 
 class ProcessingQueue:
     """
-    Sequential document processing queue.
+    Sequential document processing queue with streaming.
     
-    Ensures only one document is processed at a time to prevent
-    memory exhaustion on limited-resource environments.
+    Processes documents one at a time with page-by-page streaming
+    to minimize memory usage on constrained environments.
     """
     
     def __init__(self):
@@ -61,7 +65,7 @@ class ProcessingQueue:
                 logger.info(f"Starting processing for document {document_id}")
                 
                 try:
-                    await self._process_single_document(document_id, file_path)
+                    await self._process_document_streaming(document_id, file_path)
                 except Exception as e:
                     logger.error(f"Error processing document {document_id}: {e}")
                     await self._mark_document_failed(document_id, str(e))
@@ -71,7 +75,7 @@ class ProcessingQueue:
                 logger.info(f"Completed processing document {document_id}, memory cleaned up")
                 
                 # Small delay to allow memory to settle
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.0)
         
         except Exception as e:
             logger.error(f"Queue processing error: {e}")
@@ -80,11 +84,19 @@ class ProcessingQueue:
                 self._processing = False
                 self._current_document_id = None
     
-    async def _process_single_document(self, document_id: int, file_path: str):
-        """Process a single document with memory-conscious approach."""
+    async def _process_document_streaming(self, document_id: int, file_path: str):
+        """
+        Process a document with streaming page-by-page approach.
+        
+        This method:
+        1. Streams pages one at a time from the PDF
+        2. Creates chunks from each page immediately
+        3. Generates embeddings in small batches
+        4. Commits to database frequently
+        5. Clears memory after each step
+        """
         from app.services.database import async_session
         from app.services.document_processor import document_processor
-        from app.services.vector_store import vector_store
         
         async with async_session() as db:
             # Get document
@@ -97,44 +109,30 @@ class ProcessingQueue:
                 logger.warning(f"Document {document_id} not found")
                 return
             
-            # Skip if already completed or failed (re-processing can be triggered separately)
-            if document.status in [ProcessingStatus.COMPLETED.value, ProcessingStatus.FAILED.value]:
-                logger.info(f"Document {document_id} already processed (status: {document.status})")
+            # Skip if already completed
+            if document.status == ProcessingStatus.COMPLETED.value:
+                logger.info(f"Document {document_id} already completed")
                 return
             
             # Update status to processing
             document.status = ProcessingStatus.PROCESSING.value
+            document.error_message = None
             await db.commit()
             
             try:
-                # Process PDF with streaming approach
-                logger.info(f"Extracting text from document {document_id}")
-                processed = await document_processor.process_pdf(file_path)
-                
-                # Update page count
-                document.page_count = processed["page_count"]
+                # Get page count first (low memory operation)
+                page_count = document_processor.get_page_count(file_path)
+                document.page_count = page_count
                 await db.commit()
                 
-                # Create chunks
-                logger.info(f"Creating chunks for document {document_id}")
-                chunks = document_processor.create_chunks(processed["pages"])
+                logger.info(f"Document {document_id}: {page_count} pages to process")
                 
-                # Clear processed data to free memory
-                del processed
-                gc.collect()
-                
-                # Add chunks to vector store with memory-conscious batching
-                logger.info(f"Generating embeddings for {len(chunks)} chunks")
-                await vector_store.add_chunks_memory_safe(db, document_id, chunks)
-                
-                # Clear chunks to free memory
-                del chunks
-                gc.collect()
+                # Process with streaming
+                await self._stream_and_embed(db, document_id, file_path, document_processor)
                 
                 # Mark as completed
                 document.status = ProcessingStatus.COMPLETED.value
                 document.processed_at = datetime.utcnow()
-                document.error_message = None
                 await db.commit()
                 
                 logger.info(f"Document {document_id} processing completed successfully")
@@ -142,9 +140,114 @@ class ProcessingQueue:
             except Exception as e:
                 logger.error(f"Error processing document {document_id}: {e}")
                 document.status = ProcessingStatus.FAILED.value
-                document.error_message = str(e)
+                document.error_message = str(e)[:500]  # Limit error message length
                 await db.commit()
                 raise
+    
+    async def _stream_and_embed(
+        self,
+        db: AsyncSession,
+        document_id: int,
+        file_path: str,
+        processor,
+    ):
+        """
+        Stream pages and create embeddings incrementally.
+        
+        This processes the PDF page by page, creating chunks and embeddings
+        in small batches to minimize memory usage.
+        """
+        chunk_buffer: List[Dict[str, Any]] = []
+        chunk_index = 0
+        overlap_text = ""
+        pages_processed = 0
+        
+        # Stream pages from PDF
+        for page in processor.stream_pages(file_path):
+            pages_processed += 1
+            
+            # Create chunks from this page
+            page_chunks, chunk_index, overlap_text = processor.create_chunks_from_page(
+                page, chunk_index, overlap_text
+            )
+            
+            chunk_buffer.extend(page_chunks)
+            
+            # Process buffer when it reaches batch size
+            while len(chunk_buffer) >= EMBEDDING_BATCH_SIZE:
+                batch = chunk_buffer[:EMBEDDING_BATCH_SIZE]
+                chunk_buffer = chunk_buffer[EMBEDDING_BATCH_SIZE:]
+                
+                await self._embed_and_save_batch(db, document_id, batch)
+                
+                # Clear batch and collect garbage
+                del batch
+                gc.collect()
+            
+            # Log progress every 10 pages
+            if pages_processed % 10 == 0:
+                logger.info(f"Document {document_id}: processed {pages_processed} pages")
+            
+            # Clear page data
+            del page
+            del page_chunks
+        
+        # Process remaining chunks in buffer
+        if chunk_buffer:
+            await self._embed_and_save_batch(db, document_id, chunk_buffer)
+        
+        # Handle final overlap text as last chunk
+        if overlap_text.strip():
+            final_chunk = [{
+                "content": overlap_text.strip(),
+                "page_number": pages_processed,
+                "chunk_index": chunk_index,
+                "metadata": {},
+            }]
+            await self._embed_and_save_batch(db, document_id, final_chunk)
+        
+        logger.info(f"Document {document_id}: finished processing {pages_processed} pages")
+    
+    async def _embed_and_save_batch(
+        self,
+        db: AsyncSession,
+        document_id: int,
+        chunks: List[Dict[str, Any]],
+    ):
+        """Generate embeddings for a batch of chunks and save to database."""
+        if not chunks:
+            return
+        
+        try:
+            # Extract texts
+            texts = [chunk["content"] for chunk in chunks]
+            
+            # Generate embeddings
+            embeddings = await scx_client.create_embeddings(texts)
+            
+            # Create database records
+            for chunk, embedding in zip(chunks, embeddings):
+                db_chunk = DocumentChunk(
+                    document_id=document_id,
+                    content=chunk["content"],
+                    page_number=chunk.get("page_number"),
+                    chunk_index=chunk["chunk_index"],
+                    embedding=embedding,
+                    chunk_metadata=chunk.get("metadata"),
+                )
+                db.add(db_chunk)
+            
+            # Commit this batch
+            await db.commit()
+            
+            # Clear references
+            del texts
+            del embeddings
+            
+        except Exception as e:
+            logger.error(f"Error embedding batch for document {document_id}: {e}")
+            await db.rollback()
+            raise
     
     async def _mark_document_failed(self, document_id: int, error_message: str):
         """Mark a document as failed."""
@@ -158,7 +261,7 @@ class ProcessingQueue:
             
             if document:
                 document.status = ProcessingStatus.FAILED.value
-                document.error_message = error_message
+                document.error_message = error_message[:500]
                 await db.commit()
     
     def get_queue_status(self) -> dict:

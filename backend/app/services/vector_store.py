@@ -74,7 +74,7 @@ class VectorStore:
         db: AsyncSession,
         document_id: int,
         chunks: List[Dict[str, Any]],
-        batch_size: int = 10,
+        batch_size: int = 5,
     ) -> int:
         """
         Add document chunks with memory-conscious embedding generation.

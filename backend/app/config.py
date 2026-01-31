@@ -38,10 +38,10 @@ class Settings(BaseSettings):
         return v
 
     # Document Processing
-    max_file_size_mb: int = 50
-    max_pages: int = 300
-    chunk_size: int = 1000
-    chunk_overlap: int = 200
+    max_file_size_mb: int = 30  # Reduced for memory constraints
+    max_pages: int = 150  # Reduced for free tier memory limits
+    chunk_size: int = 800  # Smaller chunks = less memory per embedding batch
+    chunk_overlap: int = 150
 
     @property
     def async_database_url(self) -> str:
