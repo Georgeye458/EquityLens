@@ -113,7 +113,7 @@ export default function ChatInterface({
     if (!onCitationClick) return content;
     
     // Replace [Page X] or [DOC - Page X] with markdown links using a special citation: protocol
-    return content.replace(CITATION_REGEX, (match, citationText) => {
+    return content.replace(CITATION_REGEX, (_match, citationText) => {
       // Encode the citation text for use in URL
       const encoded = encodeURIComponent(citationText);
       return `[📄 ${citationText}](citation:${encoded})`;
