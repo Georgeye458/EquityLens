@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -7,9 +7,11 @@ import {
 } from 'lucide-react';
 import { useDocuments } from '../context/DocumentContext';
 import { useChat } from '../hooks/useChat';
+import { documentsApi } from '../lib/api';
 import ChatInterface from '../components/ChatInterface';
+import PDFViewer from '../components/PDFViewer';
 import LoadingSpinner from '../components/LoadingSpinner';
-import type { Document } from '../types';
+import type { Document, CitationDetail } from '../types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +51,29 @@ export default function MultiDocChatPage() {
   } = useChat();
 
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // PDF Viewer state
+  const [showPdfViewer, setShowPdfViewer] = useState(false);
+  const [pdfPage, setPdfPage] = useState(1);
+  const [activeCitation, setActiveCitation] = useState<CitationDetail | null>(null);
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
+
+  // Handle citation click - open PDF viewer at the cited page
+  const handleCitationClick = useCallback((citation: CitationDetail) => {
+    setActiveCitation(citation);
+    setPdfPage(citation.page_number);
+    // Use the document_id from the citation if available
+    if (citation.document_id) {
+      setActiveDocumentId(citation.document_id);
+    }
+    setShowPdfViewer(true);
+  }, []);
+
+  // Close PDF viewer
+  const handleClosePdfViewer = useCallback(() => {
+    setShowPdfViewer(false);
+    setActiveCitation(null);
+  }, []);
 
   const documentIds = useMemo(() => {
     const docsParam = searchParams.get('documents');
@@ -108,10 +133,19 @@ export default function MultiDocChatPage() {
     return <LoadingSpinner message="Loading documents..." />;
   }
 
+  // Get the active document for PDF viewing
+  const activeDocument = activeDocumentId 
+    ? selectedDocs.find(d => d.id === activeDocumentId) 
+    : selectedDocs[0];
+  
+  const pdfUrl = activeDocumentId 
+    ? documentsApi.getPdfUrl(activeDocumentId)
+    : '';
+
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-[calc(100vh-120px)]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <Button
           variant="ghost"
           onClick={() => navigate('/')}
@@ -119,46 +153,49 @@ export default function MultiDocChatPage() {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Documents
         </Button>
+
+        <div className="flex items-center space-x-3">
+          <Button
+            variant="outline"
+            onClick={handleNewSession}
+            disabled={isLoading}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Chat
+          </Button>
+        </div>
       </div>
 
-      {/* Document info and controls */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
+      {/* Document info and selected docs */}
+      <Card className="mb-4">
+        <CardContent className="py-3">
+          <div className="flex items-center justify-between mb-2">
             <div>
-              <h1 className="text-xl font-bold text-foreground">
+              <h1 className="text-lg font-bold text-foreground">
                 Multi-Document Chat
               </h1>
-              <p className="text-sm text-muted-foreground">
-                Chatting with {selectedDocs.length} documents: {documentNames}
+              <p className="text-xs text-muted-foreground">
+                Click citations to view source documents
               </p>
             </div>
-            
-            <div className="flex items-center space-x-3">
-              <Button
-                variant="outline"
-                onClick={handleNewSession}
-                disabled={isLoading}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                New Chat
-              </Button>
-            </div>
+            {activeCitation && showPdfViewer && (
+              <div className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                Viewing: {activeCitation.document_name || 'Document'} - Page {activeCitation.page_number}
+              </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Selected documents */}
-      <Card>
-        <CardContent className="pt-6">
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3">Documents in this chat:</h3>
           <div className="flex flex-wrap gap-2">
             {selectedDocs.map(doc => (
               <Badge
                 key={doc.id}
-                variant="secondary"
-                className="flex items-center gap-1.5"
+                variant={activeDocumentId === doc.id ? "default" : "secondary"}
+                className="flex items-center gap-1.5 cursor-pointer"
                 title={doc.filename}
+                onClick={() => {
+                  setActiveDocumentId(doc.id);
+                  setPdfPage(1);
+                  setShowPdfViewer(true);
+                }}
               >
                 <FileText className="w-3 h-3" />
                 {getDocumentLabel(doc)}
@@ -170,7 +207,7 @@ export default function MultiDocChatPage() {
 
       {/* Error */}
       {error && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex justify-between items-center">
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex justify-between items-center mb-4">
           <span>{error}</span>
           <Button variant="ghost" size="sm" onClick={clearError}>
             Dismiss
@@ -178,31 +215,35 @@ export default function MultiDocChatPage() {
         </div>
       )}
 
-      {/* Chat interface */}
-      {isLoading && !session ? (
-        <LoadingSpinner message="Starting chat session..." />
-      ) : (
-        <ChatInterface
-          messages={messages}
-          onSendMessage={handleSendMessage}
-          isLoading={isSending}
-          documentName={documentNames}
-        />
-      )}
+      {/* Main content: Chat + PDF Viewer split pane */}
+      <div className="flex-1 flex gap-4 min-h-0">
+        {/* Chat panel */}
+        <div className={showPdfViewer ? 'w-1/2' : 'w-full'}>
+          {isLoading && !session ? (
+            <LoadingSpinner message="Starting chat session..." />
+          ) : (
+            <ChatInterface
+              messages={messages}
+              onSendMessage={handleSendMessage}
+              isLoading={isSending}
+              documentName={documentNames}
+              onCitationClick={handleCitationClick}
+            />
+          )}
+        </div>
 
-      {/* Info panel */}
-      <Card className="bg-secondary border-secondary">
-        <CardContent className="pt-6">
-          <h3 className="text-sm font-semibold text-foreground mb-2">
-            Cross-Document Analysis
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            You can compare data across all selected documents. Ask questions like:
-            "Compare revenue growth between these companies" or "Which company has the highest profit margin?"
-            Responses will cite the specific document and page for each piece of information.
-          </p>
-        </CardContent>
-      </Card>
+        {/* PDF Viewer panel */}
+        {showPdfViewer && activeDocumentId && (
+          <div className="w-1/2 relative">
+            <PDFViewer
+              url={pdfUrl}
+              initialPage={pdfPage}
+              onClose={handleClosePdfViewer}
+              documentName={activeDocument?.filename}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -6,6 +6,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -266,3 +267,41 @@ async def reprocess_document(
 async def get_queue_status():
     """Get the current processing queue status."""
     return processing_queue.get_queue_status()
+
+
+@router.get("/{document_id}/pdf")
+async def get_document_pdf(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get the original PDF file for viewing.
+    
+    Returns the PDF file with appropriate headers for browser viewing.
+    """
+    result = await db.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    document = result.scalar_one_or_none()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not document.file_path:
+        raise HTTPException(status_code=404, detail="PDF file path not found")
+
+    if not os.path.exists(document.file_path):
+        raise HTTPException(
+            status_code=404,
+            detail="PDF file not available. The file may have been removed during a server restart. Please re-upload the document."
+        )
+
+    return FileResponse(
+        path=document.file_path,
+        media_type="application/pdf",
+        filename=document.filename,
+        headers={
+            "Content-Disposition": f"inline; filename=\"{document.filename}\"",
+            "Cache-Control": "public, max-age=3600",  # Cache for 1 hour
+        }
+    )

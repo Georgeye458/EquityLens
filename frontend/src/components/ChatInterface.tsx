@@ -19,6 +19,7 @@ interface ChatInterfaceProps {
   onSendMessage: (content: string) => Promise<void>;
   isLoading?: boolean;
   documentName?: string;
+  onCitationClick?: (citation: CitationDetail) => void;
 }
 
 export default function ChatInterface({
@@ -26,6 +27,7 @@ export default function ChatInterface({
   onSendMessage,
   isLoading,
   documentName,
+  onCitationClick,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -65,10 +67,18 @@ export default function ChatInterface({
   };
 
   const renderCitation = (citation: CitationDetail) => (
-    <span className="citation" title={citation.text}>
+    <button
+      type="button"
+      onClick={() => onCitationClick?.(citation)}
+      className={cn(
+        "citation inline-flex items-center",
+        onCitationClick && "cursor-pointer hover:bg-primary/20 hover:scale-105 transition-all"
+      )}
+      title={`Click to view: ${citation.text?.slice(0, 100)}...`}
+    >
       <FileText className="w-3 h-3 mr-1" />
       {citation.document_name ? `${citation.document_name} - ` : ''}p.{citation.page_number}
-    </span>
+    </button>
   );
 
   const suggestedQuestions = [

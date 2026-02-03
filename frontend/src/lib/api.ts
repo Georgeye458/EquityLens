@@ -164,6 +164,14 @@ export const documentsApi = {
       throw handleError(error as AxiosError<ApiError>);
     }
   },
+
+  /**
+   * Get the URL to view the PDF file for a document.
+   * Note: PDF may not be available if the server has restarted (Heroku ephemeral storage).
+   */
+  getPdfUrl: (id: number): string => {
+    return `${API_BASE_URL}/api/documents/${id}/pdf`;
+  },
 };
 
 // Analysis API
