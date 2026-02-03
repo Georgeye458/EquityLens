@@ -266,14 +266,12 @@ export const chatApi = {
 
   sendMessage: async (
     sessionId: number,
-    content: string,
-    model: string = 'llama-4'
+    content: string
   ): Promise<ChatResponse> => {
     try {
       const response = await api.post(
         `/chat/sessions/${sessionId}/messages`,
-        { content },
-        { params: { model } }
+        { content }
       );
       return response.data;
     } catch (error) {
@@ -284,12 +282,11 @@ export const chatApi = {
   sendMessageStream: async (
     sessionId: number,
     content: string,
-    model: string = 'llama-4',
     onChunk: (chunk: string) => void,
     onDone?: () => void,
     onError?: (error: string) => void
   ): Promise<void> => {
-    const url = `${api.defaults.baseURL}/chat/sessions/${sessionId}/messages/stream?model=${model}`;
+    const url = `${api.defaults.baseURL}/chat/sessions/${sessionId}/messages/stream`;
     
     try {
       const response = await fetch(url, {

@@ -11,7 +11,7 @@ interface UseChatReturn {
   createSession: (documentIds: number | number[], title?: string) => Promise<ChatSession>;
   loadSession: (sessionId: number) => Promise<void>;
   loadDocumentSessions: (documentId: number) => Promise<ChatSession[]>;
-  sendMessage: (content: string, model?: string) => Promise<void>;
+  sendMessage: (content: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -77,7 +77,7 @@ export function useChat(): UseChatReturn {
     }
   }, []);
 
-  const sendMessage = useCallback(async (content: string, model: string = 'llama-4') => {
+  const sendMessage = useCallback(async (content: string) => {
     if (!session) {
       setError('No active session');
       return;
@@ -112,7 +112,6 @@ export function useChat(): UseChatReturn {
       await chatApi.sendMessageStream(
         session.id,
         content,
-        model,
         // onChunk: append to assistant message
         (chunk: string) => {
           setMessages((prev) => {

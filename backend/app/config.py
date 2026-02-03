@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     # SCX.ai API Configuration
     scx_api_key: str = ""
     scx_api_base_url: str = "https://api.scx.ai/v1"
-    scx_model: str = "llama-4"
-    scx_embedding_model: str = "text-embedding-3-small"
+    scx_model: str = "DeepSeek-R1-0528"  # Deep reasoning model for accurate financial analysis
+    scx_embedding_model: str = "E5-Mistral-7B-Instruct"
 
     # Database
     database_url: str = "postgresql://localhost:5432/equitylens"

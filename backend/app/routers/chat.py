@@ -14,6 +14,7 @@ from app.services.database import get_db
 from app.services.chat_service import chat_service
 from app.services.vector_store import vector_store
 from app.models.document import Document, ProcessingStatus
+from app.config import settings
 from app.models.chat import (
     ChatSession,
     ChatMessage,
@@ -128,7 +129,6 @@ async def get_document_sessions(
 async def send_message(
     session_id: int,
     message: ChatMessageCreate,
-    model: str = "llama-4",
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -142,7 +142,7 @@ async def send_message(
             db=db,
             session_id=session_id,
             user_message=message.content,
-            model=model,
+            model=settings.scx_model,
         )
 
         return ChatResponse(
@@ -160,7 +160,6 @@ async def send_message(
 async def send_message_stream(
     session_id: int,
     message: ChatMessageCreate,
-    model: str = "llama-4",
 ):
     """
     Send a message and get streaming AI response.
@@ -180,7 +179,7 @@ async def send_message_stream(
                     db=db,
                     session_id=session_id,
                     user_message=message.content,
-                    model=model,
+                    model=settings.scx_model,
                 ):
                     # Send as SSE format
                     yield f"data: {json.dumps({'type': 'content', 'data': chunk})}\n\n"
@@ -258,7 +257,6 @@ async def preload_document_cache(
 async def quick_chat(
     document_id: int,
     message: ChatMessageCreate,
-    model: str = "llama-4",
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -283,7 +281,7 @@ async def quick_chat(
             db=db,
             session_id=session.id,
             user_message=message.content,
-            model=model,
+            model=settings.scx_model,
         )
 
         return ChatResponse(
@@ -301,7 +299,6 @@ class MultiDocChatRequest(BaseModel):
     """Request for multi-document quick chat."""
     document_ids: List[int]
     content: str
-    model: str = "llama-4"
 
 
 @router.post("/quick-multi", response_model=ChatResponse)
@@ -329,7 +326,7 @@ async def quick_chat_multi(
             db=db,
             session_id=session.id,
             user_message=request.content,
-            model=request.model,
+            model=settings.scx_model,
         )
 
         return ChatResponse(

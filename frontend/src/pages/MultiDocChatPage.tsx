@@ -13,13 +13,6 @@ import type { Document } from '../types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 function getDocumentLabel(doc: Document): string {
   const ticker = doc.company_ticker || doc.company_name.slice(0, 3).toUpperCase();
@@ -55,7 +48,6 @@ export default function MultiDocChatPage() {
     clearError,
   } = useChat();
 
-  const [selectedModel, setSelectedModel] = useState('llama-4');
   const [isInitialized, setIsInitialized] = useState(false);
 
   const documentIds = useMemo(() => {
@@ -84,7 +76,7 @@ export default function MultiDocChatPage() {
   }, [isInitialized, documentIds, selectedDocs.length, createSession]);
 
   const handleSendMessage = async (content: string) => {
-    await sendMessage(content, selectedModel);
+    await sendMessage(content);
   };
 
   const handleNewSession = async () => {
@@ -143,18 +135,6 @@ export default function MultiDocChatPage() {
             </div>
             
             <div className="flex items-center space-x-3">
-              <Select value={selectedModel} onValueChange={setSelectedModel}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
-                  <SelectItem value="deepseek-v3.1">DeepSeek V3.1 (Detailed)</SelectItem>
-                  <SelectItem value="gpt-oss-120b">GPT OSS 120B</SelectItem>
-                  <SelectItem value="magpie">Magpie (AU Sovereign)</SelectItem>
-                </SelectContent>
-              </Select>
-              
               <Button
                 variant="outline"
                 onClick={handleNewSession}
