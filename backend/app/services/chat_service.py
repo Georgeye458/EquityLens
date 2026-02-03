@@ -84,6 +84,22 @@ def get_document_label(doc: Document) -> str:
     return ' '.join(parts) if parts else 'Document'
 
 
+def strip_thinking_tags(text: str) -> str:
+    """
+    Remove <think>...</think> tags from DeepSeek-R1 model responses.
+    
+    DeepSeek-R1 outputs its reasoning process in <think> tags before the actual response.
+    This function strips that internal reasoning to show only the final answer to users.
+    """
+    import re
+    
+    # Remove thinking blocks (can span multiple lines)
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    # Clean up any extra whitespace/newlines left behind
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
+
+
 class ChatService:
     """Service for document chat with RAG - supports multiple documents."""
 
@@ -281,12 +297,15 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
         })
 
         # Generate response
-        response = await scx_client.chat_completion(
+        raw_response = await scx_client.chat_completion(
             messages=messages,
             model=model,
             system_prompt=CHAT_SYSTEM_PROMPT,
             temperature=0.7,
         )
+        
+        # Strip <think> tags from DeepSeek-R1 responses
+        response = strip_thinking_tags(raw_response)
 
         # Extract citations from response
         response_citations = self._extract_citations_from_response(response, citations)
@@ -442,8 +461,12 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
         
         logger.info(f"Chat stream: total prep took {time.time() - start_time:.3f}s, starting LLM stream...")
 
-        # Stream response
+        # Stream response with <think> tag filtering for DeepSeek-R1
         full_response = ""
+        buffer = ""
+        in_thinking = False
+        thinking_complete = False
+        
         async for chunk in scx_client.chat_completion_stream(
             messages=messages,
             model=model,
@@ -451,16 +474,56 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
             temperature=0.7,
         ):
             full_response += chunk
-            yield chunk
+            buffer += chunk
+            
+            # Check if we're starting a thinking block
+            if '<think>' in buffer and not in_thinking:
+                in_thinking = True
+                # Don't yield anything before <think> if it starts the response
+                pre_think = buffer.split('<think>')[0]
+                if pre_think.strip():
+                    yield pre_think
+                buffer = buffer.split('<think>', 1)[1] if '<think>' in buffer else ''
+            
+            # Check if thinking block is complete
+            if in_thinking and '</think>' in buffer:
+                in_thinking = False
+                thinking_complete = True
+                # Get content after </think>
+                post_think = buffer.split('</think>', 1)[1]
+                buffer = post_think
+                # Yield any content after the thinking block
+                if buffer.strip():
+                    yield buffer
+                    buffer = ""
+            
+            # If we're past the thinking block, yield chunks directly
+            elif thinking_complete and not in_thinking:
+                yield chunk
+                buffer = ""
+            
+            # If no thinking tags at all and buffer is getting long, yield it
+            elif not in_thinking and not thinking_complete and len(buffer) > 100:
+                # Check if we might be about to see a <think> tag
+                if '<' not in buffer[-10:]:
+                    yield buffer
+                    buffer = ""
+        
+        # Yield any remaining buffer (if no thinking tags were ever found)
+        if buffer and not in_thinking:
+            yield buffer
+        
+        # Clean the full response for storage
+        cleaned_response = strip_thinking_tags(full_response)
 
-        # Extract citations from complete response
-        response_citations = self._extract_citations_from_response(full_response, citations)
+        # Extract citations from cleaned response
+        response_citations = self._extract_citations_from_response(cleaned_response, citations)
 
         # Save assistant message after streaming completes
         assistant_msg = ChatMessage(
             session_id=session_id,
             role="assistant",
-            content=full_response,
+            content=cleaned_response,
             citations=response_citations,
             retrieved_chunks=[{"document_id": c["document_id"], "page": c["page_number"]} for c in citations],
         )
