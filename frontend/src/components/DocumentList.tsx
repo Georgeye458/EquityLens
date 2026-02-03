@@ -84,11 +84,30 @@ interface EditState {
 }
 
 function getDocumentDisplayName(doc: Document): string {
+  // If we have a filename, use it as the primary display name (cleaned up)
+  if (doc.filename) {
+    // Remove file extension and timestamp prefix (if present)
+    let name = doc.filename
+      .replace(/\.pdf$/i, '')
+      .replace(/^\d+\.\d+_/, ''); // Remove timestamp prefix like "1234567890.123_"
+    
+    // Replace underscores and hyphens with spaces for readability
+    name = name.replace(/[_-]+/g, ' ');
+    
+    // If the filename is too long, truncate it
+    if (name.length > 50) {
+      name = name.substring(0, 47) + '...';
+    }
+    
+    return name;
+  }
+  
+  // Fallback to constructed name if no filename
   const parts: string[] = [];
   
   if (doc.company_ticker) {
     parts.push(doc.company_ticker);
-  } else {
+  } else if (doc.company_name) {
     parts.push(doc.company_name);
   }
   
@@ -97,11 +116,11 @@ function getDocumentDisplayName(doc: Document): string {
   }
   
   const typeAbbrev: Record<string, string> = {
-    annual_report: 'Annual',
-    half_year: 'H1',
-    quarterly: 'Quarterly',
-    asx_announcement: 'ASX',
-    investor_presentation: 'Presentation',
+    annual_report: 'Annual Report',
+    half_year: 'Half-Year Results',
+    quarterly: 'Quarterly Report',
+    asx_announcement: 'ASX Announcement',
+    investor_presentation: 'Investor Presentation',
     other: '',
   };
   const typeLabel = typeAbbrev[doc.document_type];
@@ -109,7 +128,7 @@ function getDocumentDisplayName(doc: Document): string {
     parts.push(typeLabel);
   }
   
-  return parts.join(' ');
+  return parts.join(' - ') || 'Untitled Document';
 }
 
 export default function DocumentList({ documents, onDelete, onBulkDelete, onUpdate, isLoading }: DocumentListProps) {

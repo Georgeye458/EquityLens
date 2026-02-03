@@ -17,6 +17,22 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 function getDocumentLabel(doc: Document): string {
+  // Use filename as primary source for distinctive labels
+  if (doc.filename) {
+    let name = doc.filename
+      .replace(/\.pdf$/i, '')
+      .replace(/^\d+\.\d+_/, '') // Remove timestamp prefix
+      .replace(/[_-]+/g, ' ')
+      .trim();
+    
+    // Limit length for badges
+    if (name.length > 25) {
+      name = name.substring(0, 22) + '...';
+    }
+    return name;
+  }
+  
+  // Fallback to ticker/company + period
   const ticker = doc.company_ticker || doc.company_name.slice(0, 3).toUpperCase();
   const parts = [ticker];
   
@@ -24,15 +40,7 @@ function getDocumentLabel(doc: Document): string {
     parts.push(doc.reporting_period);
   }
   
-  if (!doc.reporting_period && doc.filename) {
-    const fname = doc.filename.toLowerCase();
-    if (fname.includes('pillar')) parts.push('Pillar 3');
-    else if (fname.includes('update')) parts.push('Update');
-    else if (fname.includes('result')) parts.push('Results');
-    else if (fname.includes('idp')) parts.push('IDP');
-  }
-  
-  return parts.join(' ');
+  return parts.join(' ') || 'Document';
 }
 
 export default function MultiDocChatPage() {

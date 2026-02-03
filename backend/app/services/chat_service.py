@@ -38,42 +38,50 @@ Remember: Users trust you for accurate, well-cited analysis. Quality and traceab
 
 
 def get_document_label(doc: Document) -> str:
-    """Generate a distinctive label for a document based on ticker, period, and filename."""
+    """Generate a distinctive label for a document based on filename, ticker, and period."""
+    import re
+    
+    # If we have a filename, use it as the primary source
+    if doc.filename:
+        # Clean up the filename
+        name = doc.filename
+        # Remove .pdf extension
+        name = re.sub(r'\.pdf$', '', name, flags=re.IGNORECASE)
+        # Remove timestamp prefix (e.g., "1234567890.123_")
+        name = re.sub(r'^\d+\.\d+_', '', name)
+        # Replace underscores and hyphens with spaces
+        name = re.sub(r'[_-]+', ' ', name)
+        # Trim and limit length for citations
+        name = name.strip()
+        if len(name) > 30:
+            name = name[:27] + '...'
+        return name
+    
+    # Fallback: construct from metadata
     parts = []
     
     # Start with ticker or abbreviated company name
     if doc.company_ticker:
         parts.append(doc.company_ticker)
-    else:
+    elif doc.company_name:
         parts.append(doc.company_name[:10])
     
     # Add reporting period
     if doc.reporting_period:
         parts.append(doc.reporting_period)
-    elif doc.filename:
-        # Try to extract period from filename
-        fname = doc.filename.lower()
-        import re
-        # Match patterns like 3Q25, FY25, H1 2025, etc.
-        period_match = re.search(r'([1-4]q\d{2}|fy\d{2,4}|h[12]\s?\d{2,4})', fname)
-        if period_match:
-            parts.append(period_match.group(1).upper())
     
-    # Add document type hint from filename if still not distinctive
-    if len(parts) < 2 and doc.filename:
-        fname = doc.filename.lower()
-        if 'pillar' in fname:
-            parts.append('Pillar3')
-        elif 'update' in fname:
-            parts.append('Update')
-        elif 'result' in fname:
-            parts.append('Results')
-        elif 'idp' in fname:
-            parts.append('IDP')
-        elif 'pro-forma' in fname or 'proforma' in fname:
-            parts.append('ProForma')
+    # Add document type
+    type_labels = {
+        'annual_report': 'Annual',
+        'half_year': 'H1',
+        'quarterly': 'Quarterly',
+        'asx_announcement': 'ASX',
+        'investor_presentation': 'Presentation',
+    }
+    if doc.document_type and doc.document_type in type_labels:
+        parts.append(type_labels[doc.document_type])
     
-    return ' '.join(parts)
+    return ' '.join(parts) if parts else 'Document'
 
 
 class ChatService:
