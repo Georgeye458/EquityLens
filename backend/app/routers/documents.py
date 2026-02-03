@@ -184,6 +184,12 @@ async def delete_document(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a document and all associated data."""
+    from sqlalchemy import delete as sql_delete
+    from app.models.chat import ChatSession, ChatMessage
+    from app.models.analysis import Analysis, PointOfInterest
+    from app.models.report import Report
+    from app.models.document import DocumentChunk
+    
     result = await db.execute(
         select(Document).where(Document.id == document_id)
     )
@@ -192,11 +198,51 @@ async def delete_document(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Delete file if exists
+    # Delete related data in correct order (respecting foreign keys)
+    
+    # 1. Delete chat messages for sessions associated with this document
+    await db.execute(
+        sql_delete(ChatMessage).where(
+            ChatMessage.session_id.in_(
+                select(ChatSession.id).where(ChatSession.document_id == document_id)
+            )
+        )
+    )
+    
+    # 2. Delete chat sessions
+    await db.execute(
+        sql_delete(ChatSession).where(ChatSession.document_id == document_id)
+    )
+    
+    # 3. Delete POIs
+    await db.execute(
+        sql_delete(PointOfInterest).where(
+            PointOfInterest.analysis_id.in_(
+                select(Analysis.id).where(Analysis.document_id == document_id)
+            )
+        )
+    )
+    
+    # 4. Delete analyses
+    await db.execute(
+        sql_delete(Analysis).where(Analysis.document_id == document_id)
+    )
+    
+    # 5. Delete reports
+    await db.execute(
+        sql_delete(Report).where(Report.document_id == document_id)
+    )
+    
+    # 6. Delete document chunks
+    await db.execute(
+        sql_delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
+    )
+    
+    # 7. Delete file if exists
     if document.file_path and os.path.exists(document.file_path):
         os.remove(document.file_path)
 
-    # Delete document (cascades to chunks, analyses, etc.)
+    # 8. Finally delete the document
     await db.delete(document)
     await db.commit()
 

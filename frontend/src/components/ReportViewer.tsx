@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -9,7 +9,7 @@ import {
   Clock,
   FileText,
 } from 'lucide-react';
-import type { Report } from '../types';
+import type { Report, CitationDetail } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 
 interface ReportViewerProps {
   report: Report;
+  onCitationClick?: (citation: CitationDetail) => void;
 }
 
 // Extract sections from markdown content
@@ -58,10 +59,78 @@ function extractSections(content: string): { title: string; content: string }[] 
   return sections;
 }
 
-export default function ReportViewer({ report }: ReportViewerProps) {
+// Citation pattern matching
+const CITATION_REGEX = /\[([^\]]+?)\s+-\s+Page\s+(\d+)\]/gi;
+
+// Parse citation string to extract details
+function parseCitationString(text: string): CitationDetail | null {
+  // Format: "DOC - Page X" or "CompanyName - Page X"
+  const match = text.match(/^(.+?)\s+-\s+Page\s+(\d+)$/i);
+  if (match) {
+    return {
+      document_name: match[1],
+      page_number: parseInt(match[2], 10),
+      bbox: undefined,
+      document_id: undefined,
+    };
+  }
+  return null;
+}
+
+export default function ReportViewer({ report, onCitationClick }: ReportViewerProps) {
   const [expandedSections, setExpandedSections] = useState<Set<number>>(
     new Set(Array.from({ length: 10 }, (_, i) => i)) // All expanded by default
   );
+  
+  // Preprocess content to convert citations to clickable links
+  const preprocessContent = useCallback((content: string): string => {
+    if (!onCitationClick) return content;
+    
+    return content.replace(CITATION_REGEX, (fullMatch, citationText, pageNum) => {
+      const encoded = encodeURIComponent(citationText + ' - Page ' + pageNum);
+      return `[📄 ${citationText} - Page ${pageNum}](#cite:${encoded})`;
+    });
+  }, [onCitationClick]);
+  
+  // Handle citation click from markdown links
+  const handleInlineCitationClick = useCallback((citationText: string) => {
+    if (!onCitationClick) return;
+    
+    const parsed = parseCitationString(citationText);
+    if (parsed) {
+      onCitationClick(parsed);
+    }
+  }, [onCitationClick]);
+  
+  // Custom link renderer for citations
+  const MarkdownComponents = {
+    a: (props: any) => {
+      const { href, children } = props;
+      
+      if (href?.startsWith('#cite:')) {
+        const citationText = decodeURIComponent(href.replace('#cite:', ''));
+        
+        return (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              handleInlineCitationClick(citationText);
+            }}
+            className="inline-flex items-center text-primary hover:text-primary/80 hover:underline font-medium text-xs mx-0.5 transition-colors"
+          >
+            {children}
+          </button>
+        );
+      }
+      
+      // Regular link
+      return (
+        <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      );
+    },
+  };
 
   const toggleSection = (index: number) => {
     setExpandedSections((prev) => {
@@ -199,8 +268,11 @@ export default function ReportViewer({ report }: ReportViewerProps) {
                 )}>
                   <ScrollArea className="max-h-[1200px] print:max-h-none">
                     <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-headings:font-semibold prose-table:w-full prose-table:text-xs prose-table:overflow-x-auto prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-th:border prose-th:border-border prose-td:px-3 prose-td:py-2 prose-td:border prose-td:border-border prose-table:border-collapse">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {section.content}
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={MarkdownComponents}
+                      >
+                        {preprocessContent(section.content)}
                       </ReactMarkdown>
                     </div>
                   </ScrollArea>

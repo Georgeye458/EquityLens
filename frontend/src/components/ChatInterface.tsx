@@ -112,12 +112,15 @@ export default function ChatInterface({
   const preprocessContent = useCallback((content: string): string => {
     if (!onCitationClick) return content;
     
-    // Replace [Page X] or [DOC - Page X] with markdown links using a special citation: protocol
-    return content.replace(CITATION_REGEX, (_match, citationText) => {
+    // Replace [Page X] or [DOC - Page X] with markdown links using a hash-based protocol
+    const processed = content.replace(CITATION_REGEX, (fullMatch, citationText) => {
       // Encode the citation text for use in URL
       const encoded = encodeURIComponent(citationText);
-      return `[📄 ${citationText}](citation:${encoded})`;
+      // Use #cite: instead of citation: to avoid sanitization
+      return `[📄 ${citationText}](#cite:${encoded})`;
     });
+    
+    return processed;
   }, [onCitationClick]);
 
   // Custom link component for ReactMarkdown that handles citation links
@@ -126,9 +129,9 @@ export default function ChatInterface({
     a: (props: any) => {
       const { href, children } = props;
       
-      // Check if this is a citation link
-      if (href?.startsWith('citation:')) {
-        const citationText = decodeURIComponent(href.replace('citation:', ''));
+      // Check if this is a citation link (using #cite: protocol)
+      if (href?.startsWith('#cite:')) {
+        const citationText = decodeURIComponent(href.replace('#cite:', ''));
         const parsed = parseCitationString(citationText);
         
         return (

@@ -7,8 +7,10 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { useDocuments } from '../context/DocumentContext';
+import { usePDFViewer } from '../context/PDFViewerContext';
 import { useAnalysis } from '../hooks/useAnalysis';
 import POIDashboard from '../components/POIDashboard';
+import PDFViewerPanel from '../components/PDFViewerPanel';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,11 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { CitationDetail } from '../types';
 
 export default function AnalysisPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { selectedDocument, selectDocument } = useDocuments();
+  const { openPDFViewer } = usePDFViewer();
   const {
     analysis,
     categories,
@@ -37,6 +41,13 @@ export default function AnalysisPage() {
   } = useAnalysis();
 
   const [selectedModel, setSelectedModel] = useState('llama-4');
+  
+  // Handle citation click - open PDF viewer at cited page
+  const handleCitationClick = (citation: CitationDetail) => {
+    if (id) {
+      openPDFViewer(parseInt(id), citation.page_number);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -163,33 +174,38 @@ export default function AnalysisPage() {
 
       {/* Analysis results */}
       {!isAnalyzing && categories.length > 0 && (
-        <div className="space-y-6">
-          {/* Summary */}
-          {analysis?.summary && (
-            <Card>
-              <CardContent className="pt-6">
-                <h2 className="text-lg font-semibold text-foreground mb-3">Executive Summary</h2>
-                <div className="prose prose-sm max-w-none text-muted-foreground">
-                  {analysis.summary.split('\n').map((paragraph, idx) => (
-                    <p key={idx}>{paragraph}</p>
-                  ))}
-                </div>
-                {analysis.processing_time_seconds && (
-                  <div className="mt-4 flex items-center text-xs text-muted-foreground">
-                    <Clock className="w-4 h-4 mr-1" />
-                    Analyzed in {analysis.processing_time_seconds.toFixed(1)} seconds using {analysis.model_used}
+        <>
+          <div className="space-y-6">
+            {/* Summary */}
+            {analysis?.summary && (
+              <Card>
+                <CardContent className="pt-6">
+                  <h2 className="text-lg font-semibold text-foreground mb-3">Executive Summary</h2>
+                  <div className="prose prose-sm max-w-none text-muted-foreground">
+                    {analysis.summary.split('\n').map((paragraph, idx) => (
+                      <p key={idx}>{paragraph}</p>
+                    ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                  {analysis.processing_time_seconds && (
+                    <div className="mt-4 flex items-center text-xs text-muted-foreground">
+                      <Clock className="w-4 h-4 mr-1" />
+                      Analyzed in {analysis.processing_time_seconds.toFixed(1)} seconds using {analysis.model_used}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-          {/* POI Dashboard */}
-          <div>
-            <h2 className="text-lg font-semibold text-foreground mb-4">Points of Interest</h2>
-            <POIDashboard categories={categories} />
+            {/* POI Dashboard */}
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-4">Points of Interest</h2>
+              <POIDashboard categories={categories} onCitationClick={handleCitationClick} />
+            </div>
           </div>
-        </div>
+          
+          {/* PDF Viewer Panel - slides out when citation clicked */}
+          <PDFViewerPanel />
+        </>
       )}
 
       {/* Loading */}

@@ -290,11 +290,12 @@ export const chatApi = {
   sendMessageStream: async (
     sessionId: number,
     content: string,
+    model: string = 'llama-4',
     onChunk: (chunk: string) => void,
     onDone?: () => void,
     onError?: (error: string) => void
   ): Promise<void> => {
-    const url = `${api.defaults.baseURL}/chat/sessions/${sessionId}/messages/stream`;
+    const url = `${api.defaults.baseURL}/chat/sessions/${sessionId}/messages/stream?model=${model}`;
     
     try {
       const response = await fetch(url, {

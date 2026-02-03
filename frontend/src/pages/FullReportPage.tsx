@@ -8,8 +8,10 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { useDocuments } from '../context/DocumentContext';
+import { usePDFViewer } from '../context/PDFViewerContext';
 import { useReport } from '../hooks/useReport';
 import ReportViewer from '../components/ReportViewer';
+import PDFViewerPanel from '../components/PDFViewerPanel';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,11 +23,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Link } from 'react-router-dom';
+import type { CitationDetail } from '../types';
 
 export default function FullReportPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { selectedDocument, selectDocument } = useDocuments();
+  const { openPDFViewer } = usePDFViewer();
   const {
     report,
     isLoading,
@@ -37,6 +41,13 @@ export default function FullReportPage() {
   } = useReport();
 
   const [selectedModel, setSelectedModel] = useState('llama-4');
+  
+  // Handle citation click - open PDF viewer at cited page
+  const handleCitationClick = (citation: CitationDetail) => {
+    if (id) {
+      openPDFViewer(parseInt(id), citation.page_number);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -170,7 +181,10 @@ export default function FullReportPage() {
 
       {/* Report viewer */}
       {!isGenerating && report && report.status === 'completed' && (
-        <ReportViewer report={report} />
+        <>
+          <ReportViewer report={report} onCitationClick={handleCitationClick} />
+          <PDFViewerPanel />
+        </>
       )}
 
       {/* Failed report */}

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -6,10 +6,10 @@ import {
   FileText,
 } from 'lucide-react';
 import { useDocuments } from '../context/DocumentContext';
+import { usePDFViewer } from '../context/PDFViewerContext';
 import { useChat } from '../hooks/useChat';
-import { documentsApi } from '../lib/api';
 import ChatInterface from '../components/ChatInterface';
-import PDFViewer from '../components/PDFViewer';
+import PDFViewerPanel from '../components/PDFViewerPanel';
 import LoadingSpinner from '../components/LoadingSpinner';
 import type { Document, CitationDetail } from '../types';
 import { Card, CardContent } from '@/components/ui/card';
@@ -58,30 +58,15 @@ export default function MultiDocChatPage() {
     clearError,
   } = useChat();
 
+  const { openPDFViewer } = usePDFViewer();
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // PDF Viewer state
-  const [showPdfViewer, setShowPdfViewer] = useState(false);
-  const [pdfPage, setPdfPage] = useState(1);
-  const [activeCitation, setActiveCitation] = useState<CitationDetail | null>(null);
-  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
-
-  // Handle citation click - open PDF viewer at the cited page
-  const handleCitationClick = useCallback((citation: CitationDetail) => {
-    setActiveCitation(citation);
-    setPdfPage(citation.page_number);
-    // Use the document_id from the citation if available
+  // Handle citation click - open PDF viewer overlay at the cited page
+  const handleCitationClick = (citation: CitationDetail) => {
     if (citation.document_id) {
-      setActiveDocumentId(citation.document_id);
+      openPDFViewer(citation.document_id, citation.page_number);
     }
-    setShowPdfViewer(true);
-  }, []);
-
-  // Close PDF viewer
-  const handleClosePdfViewer = useCallback(() => {
-    setShowPdfViewer(false);
-    setActiveCitation(null);
-  }, []);
+  };
 
   const documentIds = useMemo(() => {
     const docsParam = searchParams.get('documents');
@@ -141,15 +126,6 @@ export default function MultiDocChatPage() {
     return <LoadingSpinner message="Loading documents..." />;
   }
 
-  // Get the active document for PDF viewing
-  const activeDocument = activeDocumentId 
-    ? selectedDocs.find(d => d.id === activeDocumentId) 
-    : selectedDocs[0];
-  
-  const pdfUrl = activeDocumentId 
-    ? documentsApi.getPdfUrl(activeDocumentId)
-    : '';
-
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
       {/* Header */}
@@ -177,38 +153,25 @@ export default function MultiDocChatPage() {
       {/* Document info and selected docs */}
       <Card className="mb-4">
         <CardContent className="py-3">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h1 className="text-lg font-bold text-foreground">
-                Multi-Document Chat
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                Click citations to view source documents
-              </p>
+          <div>
+            <h1 className="text-lg font-bold text-foreground">
+              Multi-Document Chat
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Click citations to view source documents
+            </p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {selectedDocs.map(doc => (
+                <Badge
+                  key={doc.id}
+                  variant="secondary"
+                  className="flex items-center gap-1.5"
+                  title={doc.filename}
+                >
+                  {getDocumentLabel(doc)}
+                </Badge>
+              ))}
             </div>
-            {activeCitation && showPdfViewer && (
-              <div className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
-                Viewing: {activeCitation.document_name || 'Document'} - Page {activeCitation.page_number}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {selectedDocs.map(doc => (
-              <Badge
-                key={doc.id}
-                variant={activeDocumentId === doc.id ? "default" : "secondary"}
-                className="flex items-center gap-1.5 cursor-pointer"
-                title={doc.filename}
-                onClick={() => {
-                  setActiveDocumentId(doc.id);
-                  setPdfPage(1);
-                  setShowPdfViewer(true);
-                }}
-              >
-                <FileText className="w-3 h-3" />
-                {getDocumentLabel(doc)}
-              </Badge>
-            ))}
           </div>
         </CardContent>
       </Card>
@@ -223,35 +186,21 @@ export default function MultiDocChatPage() {
         </div>
       )}
 
-      {/* Main content: Chat + PDF Viewer split pane */}
-      <div className="flex-1 flex gap-4 min-h-0">
-        {/* Chat panel */}
-        <div className={showPdfViewer ? 'w-1/2' : 'w-full'}>
-          {isLoading && !session ? (
-            <LoadingSpinner message="Starting chat session..." />
-          ) : (
-            <ChatInterface
-              messages={messages}
-              onSendMessage={handleSendMessage}
-              isLoading={isSending}
-              documentName={documentNames}
-              onCitationClick={handleCitationClick}
-            />
-          )}
-        </div>
+      {/* Chat interface */}
+      {isLoading && !session ? (
+        <LoadingSpinner message="Starting chat session..." />
+      ) : (
+        <ChatInterface
+          messages={messages}
+          onSendMessage={handleSendMessage}
+          isLoading={isSending}
+          documentName={documentNames}
+          onCitationClick={handleCitationClick}
+        />
+      )}
 
-        {/* PDF Viewer panel */}
-        {showPdfViewer && activeDocumentId && (
-          <div className="w-1/2 relative">
-            <PDFViewer
-              url={pdfUrl}
-              initialPage={pdfPage}
-              onClose={handleClosePdfViewer}
-              documentName={activeDocument?.filename}
-            />
-          </div>
-        )}
-      </div>
+      {/* PDF Viewer Panel - slides out from right when citation clicked */}
+      <PDFViewerPanel />
     </div>
   );
 }

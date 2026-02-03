@@ -1,0 +1,70 @@
+/* React-PDF custom styling */
+
+.react-pdf__Document {
+  display: flex;
+  justify-content: center;
+}
+
+.react-pdf__Page {
+  position: relative;
+  max-width: 100%;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+}
+
+.react-pdf__Page__canvas {
+  max-width: 100%;
+  height: auto !important;
+}
+
+.react-pdf__Page__textContent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.2;
+  line-height: 1;
+}
+
+.react-pdf__Page__textContent span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+.react-pdf__Page__annotations {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Loading state */
+.react-pdf__message {
+  padding: 20px;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+}
+
+/* Highlight overlay */
+.pdf-highlight-overlay {
+  position: absolute;
+  border: 2px solid #fbbf24;
+  background-color: rgba(251, 191, 36, 0.2);
+  pointer-events: none;
+  border-radius: 2px;
+  animation: pulse-highlight 2s ease-in-out;
+}
+
+@keyframes pulse-highlight {
+  0%, 100% {
+    background-color: rgba(251, 191, 36, 0.2);
+  }
+  50% {
+    background-color: rgba(251, 191, 36, 0.4);
+  }
+}

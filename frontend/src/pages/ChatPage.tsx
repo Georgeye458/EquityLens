@@ -1,25 +1,33 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   BarChart3,
   Plus,
-  FileText,
 } from 'lucide-react';
 import { useDocuments } from '../context/DocumentContext';
 import { useChat } from '../hooks/useChat';
-import { chatApi, documentsApi } from '../lib/api';
+import { usePDFViewer } from '../context/PDFViewerContext';
+import { chatApi } from '../lib/api';
 import ChatInterface from '../components/ChatInterface';
-import PDFViewer from '../components/PDFViewer';
+import PDFViewerPanel from '../components/PDFViewerPanel';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { CitationDetail } from '../types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export default function ChatPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { selectedDocument, selectDocument } = useDocuments();
+  const { openPDFViewer } = usePDFViewer();
   const {
     session,
     messages,
@@ -32,23 +40,14 @@ export default function ChatPage() {
     clearError,
   } = useChat();
 
-  // PDF Viewer state
-  const [showPdfViewer, setShowPdfViewer] = useState(false);
-  const [pdfPage, setPdfPage] = useState(1);
-  const [activeCitation, setActiveCitation] = useState<CitationDetail | null>(null);
+  const [selectedModel, setSelectedModel] = useState('llama-4');
 
-  // Handle citation click - open PDF viewer at the cited page
-  const handleCitationClick = useCallback((citation: CitationDetail) => {
-    setActiveCitation(citation);
-    setPdfPage(citation.page_number);
-    setShowPdfViewer(true);
-  }, []);
-
-  // Close PDF viewer
-  const handleClosePdfViewer = useCallback(() => {
-    setShowPdfViewer(false);
-    setActiveCitation(null);
-  }, []);
+  // Handle citation click - open PDF viewer overlay at the cited page
+  const handleCitationClick = (citation: CitationDetail) => {
+    if (id) {
+      openPDFViewer(parseInt(id), citation.page_number);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -67,7 +66,7 @@ export default function ChatPage() {
   }, [id, selectDocument, loadDocumentSessions, createSession]);
 
   const handleSendMessage = async (content: string) => {
-    await sendMessage(content);
+    await sendMessage(content, selectedModel);
   };
 
   const handleNewSession = async () => {
@@ -80,12 +79,10 @@ export default function ChatPage() {
     return <LoadingSpinner message="Loading document..." />;
   }
 
-  const pdfUrl = id ? documentsApi.getPdfUrl(parseInt(id)) : '';
-
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between">
         <Button
           variant="ghost"
           onClick={() => navigate(`/documents/${id}`)}
@@ -94,57 +91,59 @@ export default function ChatPage() {
           Back to Document
         </Button>
 
-        <div className="flex items-center space-x-3">
-          {!showPdfViewer && (
-            <Button
-              variant="outline"
-              onClick={() => setShowPdfViewer(true)}
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              View PDF
-            </Button>
-          )}
-          <Button variant="outline" asChild>
-            <Link to={`/documents/${id}/analysis`}>
-              <BarChart3 className="w-4 h-4 mr-2" />
-              View Analysis
-            </Link>
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleNewSession}
-            disabled={isLoading}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            New Chat
-          </Button>
-        </div>
+        <Button variant="outline" asChild>
+          <Link to={`/documents/${id}/analysis`}>
+            <BarChart3 className="w-4 h-4 mr-2" />
+            View Analysis
+          </Link>
+        </Button>
       </div>
 
-      {/* Document info */}
-      <Card className="mb-4">
-        <CardContent className="py-3">
+      {/* Document info and controls */}
+      <Card>
+        <CardContent className="pt-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-bold text-foreground">
+              <h1 className="text-xl font-bold text-foreground">
                 Chat: {selectedDocument.company_name}
               </h1>
-              <p className="text-xs text-muted-foreground">
-                {selectedDocument.page_count} pages • Click citations to view source
+              <p className="text-sm text-muted-foreground">
+                Ask questions about the full document content • {selectedDocument.page_count} pages
+              </p>
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                💡 Click any citation to view the source page
               </p>
             </div>
-            {activeCitation && showPdfViewer && (
-              <div className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
-                Viewing: {activeCitation.document_name || 'Document'} - Page {activeCitation.page_number}
-              </div>
-            )}
+            
+            <div className="flex items-center space-x-3">
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
+                  <SelectItem value="deepseek-v3.1">DeepSeek V3.1 (Detailed)</SelectItem>
+                  <SelectItem value="gpt-oss-120b">GPT OSS 120B</SelectItem>
+                  <SelectItem value="magpie">Magpie (AU Sovereign)</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Button
+                variant="outline"
+                onClick={handleNewSession}
+                disabled={isLoading}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Chat
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Error */}
       {error && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex justify-between items-center mb-4">
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex justify-between items-center">
           <span>{error}</span>
           <Button variant="ghost" size="sm" onClick={clearError}>
             Dismiss
@@ -152,35 +151,34 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Main content: Chat + PDF Viewer split pane */}
-      <div className="flex-1 flex gap-4 min-h-0">
-        {/* Chat panel */}
-        <div className={showPdfViewer ? 'w-1/2' : 'w-full'}>
-          {isLoading && !session ? (
-            <LoadingSpinner message="Loading chat..." />
-          ) : (
-            <ChatInterface
-              messages={messages}
-              onSendMessage={handleSendMessage}
-              isLoading={isSending}
-              documentName={selectedDocument.company_name}
-              onCitationClick={handleCitationClick}
-            />
-          )}
-        </div>
+      {/* Chat interface */}
+      {isLoading && !session ? (
+        <LoadingSpinner message="Loading chat..." />
+      ) : (
+        <ChatInterface
+          messages={messages}
+          onSendMessage={handleSendMessage}
+          isLoading={isSending}
+          documentName={selectedDocument.company_name}
+          onCitationClick={handleCitationClick}
+        />
+      )}
 
-        {/* PDF Viewer panel */}
-        {showPdfViewer && (
-          <div className="w-1/2 relative">
-            <PDFViewer
-              url={pdfUrl}
-              initialPage={pdfPage}
-              onClose={handleClosePdfViewer}
-              documentName={selectedDocument.filename}
-            />
-          </div>
-        )}
-      </div>
+      {/* PDF Viewer Panel - slides out from right when citation clicked */}
+      <PDFViewerPanel />
+
+      {/* Info panel */}
+      <Card className="bg-secondary border-secondary">
+        <CardContent className="pt-6">
+          <h3 className="text-sm font-semibold text-foreground mb-2">
+            Full Document Access
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Unlike traditional POI extraction, this chat has access to the entire document content.
+            Ask detailed questions about any section, and responses will include page citations for verification.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

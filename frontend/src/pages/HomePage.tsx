@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useDocuments } from '../context/DocumentContext';
+import { documentsApi } from '../lib/api';
 import FileUpload from '../components/FileUpload';
 import DocumentList from '../components/DocumentList';
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,8 +41,18 @@ export default function HomePage() {
   };
 
   const handleBulkDelete = async (ids: number[]) => {
-    for (const id of ids) {
-      await deleteDocument(id);
+    try {
+      // Delete all documents in parallel without refreshing between each
+      await Promise.all(
+        ids.map(id => documentsApi.delete(id))
+      );
+      // Refresh list once at the end
+      await fetchDocuments();
+    } catch (err) {
+      console.error('Bulk delete error:', err);
+      // Refresh to show current state even if some failed
+      await fetchDocuments();
+      throw err;
     }
   };
 
