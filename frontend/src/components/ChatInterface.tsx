@@ -122,31 +122,49 @@ export default function ChatInterface({
 
   // Custom link component for ReactMarkdown that handles citation links
   const MarkdownComponents = useMemo(() => ({
-    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    a: (props: any) => {
+      const { href, children } = props;
+      
       // Check if this is a citation link
       if (href?.startsWith('citation:')) {
         const citationText = decodeURIComponent(href.replace('citation:', ''));
         const parsed = parseCitationString(citationText);
         
         return (
-          <button
-            type="button"
+          <span
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               handleInlineCitationClick(citationText);
             }}
-            className="inline-citation-link inline-flex items-center mx-0.5 px-1.5 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800/50 transition-colors cursor-pointer no-underline"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                handleInlineCitationClick(citationText);
+              }
+            }}
+            className="inline-citation-link inline-flex items-center mx-0.5 px-1.5 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800/50 transition-colors cursor-pointer no-underline select-none"
             title={`Click to view ${parsed?.documentName ? parsed.documentName + ' - ' : ''}Page ${parsed?.pageNumber || '?'}`}
           >
             <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
             <span>{citationText}</span>
-          </button>
+          </span>
         );
       }
       
-      // Regular link
+      // Regular link - open in new tab
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+        <a 
+          href={href} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-blue-600 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
           {children}
         </a>
       );
@@ -168,9 +186,21 @@ export default function ChatInterface({
   }, [preprocessContent, MarkdownComponents]);
 
   const renderCitation = (citation: CitationDetail) => (
-    <button
-      type="button"
-      onClick={() => onCitationClick?.(citation)}
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onCitationClick?.(citation);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          onCitationClick?.(citation);
+        }
+      }}
       className={cn(
         "citation inline-flex items-center",
         onCitationClick && "cursor-pointer hover:bg-primary/20 hover:scale-105 transition-all"
@@ -179,7 +209,7 @@ export default function ChatInterface({
     >
       <FileText className="w-3 h-3 mr-1" />
       {citation.document_name ? `${citation.document_name} - ` : ''}p.{citation.page_number}
-    </button>
+    </span>
   );
 
   const suggestedQuestions = [
