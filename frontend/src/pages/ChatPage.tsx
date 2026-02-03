@@ -5,7 +5,6 @@ import {
   BarChart3,
   Plus,
   FileText,
-  PanelRightClose,
 } from 'lucide-react';
 import { useDocuments } from '../context/DocumentContext';
 import { useChat } from '../hooks/useChat';
