@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   SendHorizontal,
   FileText,
@@ -20,6 +20,34 @@ interface ChatInterfaceProps {
   isLoading?: boolean;
   documentName?: string;
   onCitationClick?: (citation: CitationDetail) => void;
+}
+
+// Regex to match citation patterns like [Page 15], [Pages 10-12], [WBC - Page 15], [Document Name - p. 5]
+const CITATION_REGEX = /\[([^\]]*?(?:page|pages|p\.)\s*\d+(?:\s*[-–]\s*\d+)?)\]/gi;
+
+// Parse a citation string to extract document name and page number
+function parseCitationString(citationText: string): { documentName: string | null; pageNumber: number; pageEnd?: number } | null {
+  // Match patterns like "WBC - Page 15", "Page 15", "p. 15", "Pages 10-12"
+  const withDocMatch = citationText.match(/^(.+?)\s*[-–]\s*(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);
+  if (withDocMatch) {
+    return {
+      documentName: withDocMatch[1].trim(),
+      pageNumber: parseInt(withDocMatch[2], 10),
+      pageEnd: withDocMatch[3] ? parseInt(withDocMatch[3], 10) : undefined,
+    };
+  }
+  
+  // Match patterns like "Page 15", "p. 15", "Pages 10-12"
+  const pageOnlyMatch = citationText.match(/^(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);
+  if (pageOnlyMatch) {
+    return {
+      documentName: null,
+      pageNumber: parseInt(pageOnlyMatch[1], 10),
+      pageEnd: pageOnlyMatch[2] ? parseInt(pageOnlyMatch[2], 10) : undefined,
+    };
+  }
+  
+  return null;
 }
 
 export default function ChatInterface({
@@ -65,6 +93,79 @@ export default function ChatInterface({
       handleSubmit(e);
     }
   };
+
+  // Handle inline citation click
+  const handleInlineCitationClick = useCallback((citationText: string) => {
+    if (!onCitationClick) return;
+    
+    const parsed = parseCitationString(citationText);
+    if (parsed) {
+      onCitationClick({
+        page_number: parsed.pageNumber,
+        document_name: parsed.documentName || undefined,
+        text: `Citation: ${citationText}`,
+      });
+    }
+  }, [onCitationClick]);
+
+  // Pre-process content to convert citations to special markdown links
+  const preprocessContent = useCallback((content: string): string => {
+    if (!onCitationClick) return content;
+    
+    // Replace [Page X] or [DOC - Page X] with markdown links using a special citation: protocol
+    return content.replace(CITATION_REGEX, (match, citationText) => {
+      // Encode the citation text for use in URL
+      const encoded = encodeURIComponent(citationText);
+      return `[📄 ${citationText}](citation:${encoded})`;
+    });
+  }, [onCitationClick]);
+
+  // Custom link component for ReactMarkdown that handles citation links
+  const MarkdownComponents = useMemo(() => ({
+    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
+      // Check if this is a citation link
+      if (href?.startsWith('citation:')) {
+        const citationText = decodeURIComponent(href.replace('citation:', ''));
+        const parsed = parseCitationString(citationText);
+        
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              handleInlineCitationClick(citationText);
+            }}
+            className="inline-citation-link inline-flex items-center mx-0.5 px-1.5 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800/50 transition-colors cursor-pointer no-underline"
+            title={`Click to view ${parsed?.documentName ? parsed.documentName + ' - ' : ''}Page ${parsed?.pageNumber || '?'}`}
+          >
+            <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
+            <span>{citationText}</span>
+          </button>
+        );
+      }
+      
+      // Regular link
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+          {children}
+        </a>
+      );
+    },
+  }), [handleInlineCitationClick]);
+
+  // Render content with clickable inline citations
+  const renderContentWithCitations = useCallback((content: string) => {
+    const processedContent = preprocessContent(content);
+    
+    return (
+      <ReactMarkdown 
+        remarkPlugins={[remarkGfm]}
+        components={MarkdownComponents}
+      >
+        {processedContent}
+      </ReactMarkdown>
+    );
+  }, [preprocessContent, MarkdownComponents]);
 
   const renderCitation = (citation: CitationDetail) => (
     <button
@@ -176,9 +277,7 @@ export default function ChatInterface({
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     ) : (
                       <div className="prose prose-sm max-w-none overflow-x-auto prose-headings:text-foreground prose-headings:font-semibold prose-h3:text-base prose-h4:text-sm prose-table:text-xs prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-th:border prose-th:border-border prose-td:px-3 prose-td:py-2 prose-td:border prose-td:border-border prose-table:border-collapse [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:block [&_pre]:overflow-x-auto [&_code]:break-all">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {message.content}
-                        </ReactMarkdown>
+                        {renderContentWithCitations(message.content)}
                       </div>
                     )}
 
