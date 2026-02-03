@@ -1,15 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeftIcon,
-  SparklesIcon,
-  ClockIcon,
-  ChatBubbleLeftRightIcon,
-} from '@heroicons/react/24/outline';
+  ArrowLeft,
+  Sparkles,
+  Clock,
+  MessageSquare,
+} from 'lucide-react';
 import { useDocuments } from '../context/DocumentContext';
 import { useAnalysis } from '../hooks/useAnalysis';
 import POIDashboard from '../components/POIDashboard';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export default function AnalysisPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +29,7 @@ export default function AnalysisPage() {
     categories,
     isLoading,
     isAnalyzing,
+    statusMessage,
     error,
     startAnalysis,
     fetchAnalysis,
@@ -50,94 +60,105 @@ export default function AnalysisPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <button
+        <Button
+          variant="ghost"
           onClick={() => navigate(`/documents/${id}`)}
-          className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
         >
-          <ArrowLeftIcon className="w-4 h-4 mr-2" />
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Document
-        </button>
+        </Button>
 
-        <Link
-          to={`/documents/${id}/chat`}
-          className="btn-secondary flex items-center"
-        >
-          <ChatBubbleLeftRightIcon className="w-4 h-4 mr-2" />
-          Chat with Document
-        </Link>
+        <Button variant="outline" asChild>
+          <Link to={`/documents/${id}/chat`}>
+            <MessageSquare className="w-4 h-4 mr-2" />
+            Chat with Document
+          </Link>
+        </Button>
       </div>
 
       {/* Document info */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">
-              {selectedDocument.company_name} Analysis
-            </h1>
-            <p className="text-sm text-gray-500">
-              {selectedDocument.reporting_period || 'Earnings Report'} • {selectedDocument.page_count} pages
-            </p>
-          </div>
-          
-          {/* Analysis controls */}
-          <div className="flex items-center space-x-3">
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="input text-sm"
-              disabled={isAnalyzing}
-            >
-              <option value="llama-4">Llama 4 (Fast)</option>
-              <option value="deepseek-v3.1">DeepSeek V3.1 (Detailed)</option>
-              <option value="gpt-oss-120b">GPT OSS 120B</option>
-              <option value="magpie">Magpie (AU Sovereign)</option>
-            </select>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-foreground">
+                {selectedDocument.company_name} Analysis
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {selectedDocument.reporting_period || 'Earnings Report'} • {selectedDocument.page_count} pages
+              </p>
+            </div>
             
-            <button
-              onClick={handleStartAnalysis}
-              disabled={isAnalyzing}
-              className="btn-primary flex items-center"
-            >
-              <SparklesIcon className="w-4 h-4 mr-2" />
-              {isAnalyzing ? 'Analyzing...' : analysis ? 'Re-analyze' : 'Run Analysis'}
-            </button>
+            {/* Analysis controls */}
+            <div className="flex items-center space-x-3">
+              <Select
+                value={selectedModel}
+                onValueChange={setSelectedModel}
+                disabled={isAnalyzing}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
+                  <SelectItem value="deepseek-v3.1">DeepSeek V3.1 (Detailed)</SelectItem>
+                  <SelectItem value="gpt-oss-120b">GPT OSS 120B</SelectItem>
+                  <SelectItem value="magpie">Magpie (AU Sovereign)</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Button
+                onClick={handleStartAnalysis}
+                disabled={isAnalyzing}
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                {isAnalyzing ? 'Analyzing...' : analysis ? 'Re-analyze' : 'Run Analysis'}
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg">
           {error}
         </div>
       )}
 
-      {/* Analysis in progress */}
+      {/* Analysis in progress — incremental UX */}
       {isAnalyzing && (
-        <div className="card p-8 text-center">
-          <LoadingSpinner size="lg" />
-          <p className="mt-4 text-gray-600">
-            Extracting Points of Interest from {selectedDocument.page_count} pages...
-          </p>
-          <p className="text-sm text-gray-500 mt-2">
-            This typically takes 2-5 minutes for large documents.
-          </p>
-        </div>
+        <Card className="p-8 text-center">
+          <div className="flex flex-col items-center gap-4">
+            <LoadingSpinner size="lg" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                Step 1 of 1
+              </p>
+              <p className="text-foreground animate-pulse">
+                {statusMessage ?? 'Extracting key points and generating summary…'}
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground/70 max-w-md">
+              One AI pass extracts POIs and writes the executive summary. This may take 1–3 minutes for large documents.
+            </p>
+          </div>
+        </Card>
       )}
 
       {/* No analysis yet */}
       {!isLoading && !isAnalyzing && !analysis && categories.length === 0 && (
-        <div className="card p-8 text-center">
-          <SparklesIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Analysis Yet</h3>
-          <p className="text-sm text-gray-500 mb-4">
+        <Card className="p-8 text-center">
+          <Sparkles className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+          <h3 className="text-lg font-medium text-foreground mb-2">No Analysis Yet</h3>
+          <p className="text-sm text-muted-foreground mb-4">
             Run AI analysis to extract financial metrics, segment data, and management commentary.
           </p>
-          <button onClick={handleStartAnalysis} className="btn-primary">
-            <SparklesIcon className="w-4 h-4 mr-2" />
+          <Button onClick={handleStartAnalysis}>
+            <Sparkles className="w-4 h-4 mr-2" />
             Start Analysis
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
 
       {/* Analysis results */}
@@ -145,25 +166,27 @@ export default function AnalysisPage() {
         <div className="space-y-6">
           {/* Summary */}
           {analysis?.summary && (
-            <div className="card p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-3">Executive Summary</h2>
-              <div className="prose prose-sm max-w-none text-gray-700">
-                {analysis.summary.split('\n').map((paragraph, idx) => (
-                  <p key={idx}>{paragraph}</p>
-                ))}
-              </div>
-              {analysis.processing_time_seconds && (
-                <div className="mt-4 flex items-center text-xs text-gray-500">
-                  <ClockIcon className="w-4 h-4 mr-1" />
-                  Analyzed in {analysis.processing_time_seconds.toFixed(1)} seconds using {analysis.model_used}
+            <Card>
+              <CardContent className="pt-6">
+                <h2 className="text-lg font-semibold text-foreground mb-3">Executive Summary</h2>
+                <div className="prose prose-sm max-w-none text-muted-foreground">
+                  {analysis.summary.split('\n').map((paragraph, idx) => (
+                    <p key={idx}>{paragraph}</p>
+                  ))}
                 </div>
-              )}
-            </div>
+                {analysis.processing_time_seconds && (
+                  <div className="mt-4 flex items-center text-xs text-muted-foreground">
+                    <Clock className="w-4 h-4 mr-1" />
+                    Analyzed in {analysis.processing_time_seconds.toFixed(1)} seconds using {analysis.model_used}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
 
           {/* POI Dashboard */}
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Points of Interest</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-4">Points of Interest</h2>
             <POIDashboard categories={categories} />
           </div>
         </div>

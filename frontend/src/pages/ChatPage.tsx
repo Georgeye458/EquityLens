@@ -1,14 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeftIcon,
-  ChartBarIcon,
-  PlusIcon,
-} from '@heroicons/react/24/outline';
+  ArrowLeft,
+  BarChart3,
+  Plus,
+} from 'lucide-react';
 import { useDocuments } from '../context/DocumentContext';
 import { useChat } from '../hooks/useChat';
+import { chatApi } from '../lib/api';
 import ChatInterface from '../components/ChatInterface';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export default function ChatPage() {
   const { id } = useParams<{ id: string }>();
@@ -33,7 +43,9 @@ export default function ChatPage() {
       const documentId = parseInt(id);
       selectDocument(documentId);
       
-      // Load existing sessions or create a new one
+      // Preload cache in background (makes first message instant!)
+      chatApi.preloadCache(documentId);
+      
       loadDocumentSessions(documentId).then((sessions) => {
         if (sessions.length === 0) {
           createSession(documentId);
@@ -60,68 +72,70 @@ export default function ChatPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <button
+        <Button
+          variant="ghost"
           onClick={() => navigate(`/documents/${id}`)}
-          className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
         >
-          <ArrowLeftIcon className="w-4 h-4 mr-2" />
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Document
-        </button>
+        </Button>
 
         <div className="flex items-center space-x-3">
-          <Link
-            to={`/documents/${id}/analysis`}
-            className="btn-secondary flex items-center"
-          >
-            <ChartBarIcon className="w-4 h-4 mr-2" />
-            View Analysis
-          </Link>
+          <Button variant="outline" asChild>
+            <Link to={`/documents/${id}/analysis`}>
+              <BarChart3 className="w-4 h-4 mr-2" />
+              View Analysis
+            </Link>
+          </Button>
         </div>
       </div>
 
       {/* Document info and controls */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">
-              Chat: {selectedDocument.company_name}
-            </h1>
-            <p className="text-sm text-gray-500">
-              Ask questions about the full document content • {selectedDocument.page_count} pages
-            </p>
-          </div>
-          
-          <div className="flex items-center space-x-3">
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="input text-sm"
-            >
-              <option value="llama-4">Llama 4 (Fast)</option>
-              <option value="deepseek-v3.1">DeepSeek V3.1 (Detailed)</option>
-              <option value="gpt-oss-120b">GPT OSS 120B</option>
-              <option value="magpie">Magpie (AU Sovereign)</option>
-            </select>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-foreground">
+                Chat: {selectedDocument.company_name}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Ask questions about the full document content • {selectedDocument.page_count} pages
+              </p>
+            </div>
             
-            <button
-              onClick={handleNewSession}
-              className="btn-secondary flex items-center"
-              disabled={isLoading}
-            >
-              <PlusIcon className="w-4 h-4 mr-2" />
-              New Chat
-            </button>
+            <div className="flex items-center space-x-3">
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
+                  <SelectItem value="deepseek-v3.1">DeepSeek V3.1 (Detailed)</SelectItem>
+                  <SelectItem value="gpt-oss-120b">GPT OSS 120B</SelectItem>
+                  <SelectItem value="magpie">Magpie (AU Sovereign)</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Button
+                variant="outline"
+                onClick={handleNewSession}
+                disabled={isLoading}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Chat
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex justify-between items-center">
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex justify-between items-center">
           <span>{error}</span>
-          <button onClick={clearError} className="text-red-500 hover:text-red-700">
+          <Button variant="ghost" size="sm" onClick={clearError}>
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
 
@@ -138,15 +152,17 @@ export default function ChatPage() {
       )}
 
       {/* Info panel */}
-      <div className="card p-4 bg-primary-50 border-primary-100">
-        <h3 className="text-sm font-semibold text-primary-900 mb-2">
-          Full Document Access
-        </h3>
-        <p className="text-sm text-primary-700">
-          Unlike traditional POI extraction, this chat has access to the entire document content.
-          Ask detailed questions about any section, and responses will include page citations for verification.
-        </p>
-      </div>
+      <Card className="bg-secondary border-secondary">
+        <CardContent className="pt-6">
+          <h3 className="text-sm font-semibold text-foreground mb-2">
+            Full Document Access
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Unlike traditional POI extraction, this chat has access to the entire document content.
+            Ask detailed questions about any section, and responses will include page citations for verification.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

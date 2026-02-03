@@ -5,13 +5,21 @@ AI-powered earnings report analysis tool
 
 import asyncio
 import logging
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import documents, analysis, chat
+from app.routers import documents, analysis, chat, reports
 from app.services.database import init_db
+
+# Configure logging to console so diagnostic logs show in terminal
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +105,7 @@ app.add_middleware(
 app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 
 
 @app.get("/")

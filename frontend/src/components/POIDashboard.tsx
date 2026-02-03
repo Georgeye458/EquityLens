@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  DocumentTextIcon,
-} from '@heroicons/react/24/outline';
+import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import type { POIsByCategory, POI, Citation } from '../types';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface POIDashboardProps {
   categories: POIsByCategory[];
@@ -40,12 +40,12 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
     const { value, output_type } = poi;
 
     if (value === null || value === undefined) {
-      return <span className="text-gray-400 italic">Not found</span>;
+      return <span className="text-muted-foreground italic">Not found</span>;
     }
 
     switch (output_type) {
       case 'value':
-        return <span className="font-medium text-gray-900">{value !== null && value !== undefined ? String(value) : ''}</span>;
+        return <span className="font-medium text-foreground">{value !== null && value !== undefined ? String(value) : ''}</span>;
 
       case 'value_delta':
         if (typeof value === 'object' && value !== null) {
@@ -53,30 +53,31 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
           return (
             <div className="space-y-1">
               <div className="flex items-baseline space-x-2">
-                <span className="font-semibold text-gray-900">
+                <span className="font-semibold text-foreground">
                   {v.current !== undefined ? String(v.current) : '-'}
                 </span>
-                {v.unit ? <span className="text-xs text-gray-500">{String(v.unit)}</span> : null}
+                {v.unit ? <span className="text-xs text-muted-foreground">{String(v.unit)}</span> : null}
               </div>
               {v.change_percent !== undefined && (
                 <span
-                  className={`text-sm ${
-                    Number(v.change_percent) >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}
+                  className={cn(
+                    "text-sm",
+                    Number(v.change_percent) >= 0 ? "text-green-600" : "text-red-600"
+                  )}
                 >
                   {Number(v.change_percent) >= 0 ? '+' : ''}
                   {Number(v.change_percent).toFixed(1)}%
                 </span>
               )}
               {v.prior !== undefined && (
-                <span className="text-xs text-gray-500 block">
+                <span className="text-xs text-muted-foreground block">
                   Prior: {String(v.prior)}
                 </span>
               )}
             </div>
           );
         }
-        return <span className="font-medium text-gray-900">{String(value)}</span>;
+        return <span className="font-medium text-foreground">{String(value)}</span>;
 
       case 'multi_value':
       case 'array':
@@ -84,7 +85,7 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
           return (
             <ul className="space-y-1">
               {value.map((item, idx) => (
-                <li key={idx} className="text-sm text-gray-700">
+                <li key={idx} className="text-sm text-muted-foreground">
                   {typeof item === 'object' ? JSON.stringify(item) : String(item)}
                 </li>
               ))}
@@ -96,23 +97,23 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
             <dl className="space-y-1">
               {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
                 <div key={k} className="flex justify-between text-sm">
-                  <dt className="text-gray-500">{k}:</dt>
-                  <dd className="font-medium text-gray-900">{String(v)}</dd>
+                  <dt className="text-muted-foreground">{k}:</dt>
+                  <dd className="font-medium text-foreground">{String(v)}</dd>
                 </div>
               ))}
             </dl>
           );
         }
-        return <span className="font-medium text-gray-900">{String(value)}</span>;
+        return <span className="font-medium text-foreground">{String(value)}</span>;
 
       case 'commentary':
         return (
-          <p className="text-sm text-gray-700 leading-relaxed">{String(value)}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">{String(value)}</p>
         );
 
       default:
         return (
-          <span className="font-medium text-gray-900">
+          <span className="font-medium text-foreground">
             {typeof value === 'object' ? JSON.stringify(value) : String(value)}
           </span>
         );
@@ -131,7 +132,7 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
             className="citation"
             title={citation.text}
           >
-            <DocumentTextIcon className="w-3 h-3 mr-1" />
+            <FileText className="w-3 h-3 mr-1" />
             p.{citation.page_number}
           </button>
         ))}
@@ -143,24 +144,24 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
     if (confidence === null) return null;
 
     const level = confidence >= 0.8 ? 'high' : confidence >= 0.6 ? 'medium' : 'low';
-    const colors = {
-      high: 'bg-green-100 text-green-800',
-      medium: 'bg-yellow-100 text-yellow-800',
-      low: 'bg-red-100 text-red-800',
+    const variants: Record<string, 'success' | 'warning' | 'destructive'> = {
+      high: 'success',
+      medium: 'warning',
+      low: 'destructive',
     };
 
     return (
-      <span className={`text-xs px-1.5 py-0.5 rounded ${colors[level]}`}>
+      <Badge variant={variants[level]} className="text-xs">
         {Math.round(confidence * 100)}%
-      </span>
+      </Badge>
     );
   };
 
   if (categories.length === 0) {
     return (
-      <div className="card p-8 text-center">
-        <p className="text-gray-500">No analysis data available.</p>
-      </div>
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground">No analysis data available.</p>
+      </Card>
     );
   }
 
@@ -170,45 +171,46 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
         const isExpanded = expandedCategories.has(category.category);
 
         return (
-          <div key={category.category} className="card overflow-hidden">
+          <Card key={category.category} className="overflow-hidden">
             {/* Category header */}
-            <button
+            <Button
+              variant="ghost"
               onClick={() => toggleCategory(category.category)}
-              className="w-full px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between hover:bg-gray-100 transition-colors"
+              className="w-full px-4 py-3 bg-muted/50 border-b flex items-center justify-between hover:bg-muted rounded-none h-auto"
             >
               <div className="flex items-center">
                 <span className="text-lg mr-2">
                   {categoryIcons[category.category] || '📋'}
                 </span>
-                <h3 className="text-sm font-semibold text-gray-900">
+                <h3 className="text-sm font-semibold text-foreground">
                   {category.category_display}
                 </h3>
-                <span className="ml-2 text-xs text-gray-500">
+                <span className="ml-2 text-xs text-muted-foreground">
                   ({category.pois.length} items)
                 </span>
               </div>
               {isExpanded ? (
-                <ChevronDownIcon className="w-5 h-5 text-gray-400" />
+                <ChevronDown className="w-5 h-5 text-muted-foreground" />
               ) : (
-                <ChevronRightIcon className="w-5 h-5 text-gray-400" />
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
               )}
-            </button>
+            </Button>
 
             {/* POI list */}
             {isExpanded && (
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-border">
                 {category.pois.map((poi) => (
                   <div key={poi.id} className="px-4 py-3">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
-                          <h4 className="text-sm font-medium text-gray-900">
+                          <h4 className="text-sm font-medium text-foreground">
                             {poi.name}
                           </h4>
                           {renderConfidence(poi.confidence)}
                         </div>
                         {poi.description && (
-                          <p className="text-xs text-gray-500 mt-0.5">
+                          <p className="text-xs text-muted-foreground mt-0.5">
                             {poi.description}
                           </p>
                         )}
@@ -220,7 +222,7 @@ export default function POIDashboard({ categories, onCitationClick }: POIDashboa
                 ))}
               </div>
             )}
-          </div>
+          </Card>
         );
       })}
     </div>

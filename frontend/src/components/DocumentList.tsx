@@ -1,21 +1,34 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  DocumentTextIcon,
-  ClockIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
-  ArrowPathIcon,
-  TrashIcon,
-  PencilIcon,
-  CheckIcon,
-  XMarkIcon,
-  ArrowUturnLeftIcon,
-  ChatBubbleLeftRightIcon,
-  ChartBarIcon,
-} from '@heroicons/react/24/outline';
+  FileText,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  Trash2,
+  Pencil,
+  Check,
+  X,
+  RotateCcw,
+  MessageSquare,
+  BarChart3,
+} from 'lucide-react';
 import type { Document } from '../types';
 import { documentsApi } from '../lib/api';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 interface DocumentListProps {
   documents: Document[];
@@ -26,39 +39,33 @@ interface DocumentListProps {
 }
 
 const statusConfig: Record<string, {
-  icon: typeof ClockIcon;
-  color: string;
-  bg: string;
+  icon: typeof Clock;
+  variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info';
   label: string;
   animate?: boolean;
 }> = {
   pending: {
-    icon: ClockIcon,
-    color: 'text-yellow-500',
-    bg: 'bg-yellow-50',
+    icon: Clock,
+    variant: 'warning',
     label: 'Pending',
   },
   processing: {
-    icon: ArrowPathIcon,
-    color: 'text-blue-500',
-    bg: 'bg-blue-50',
+    icon: RefreshCw,
+    variant: 'info',
     label: 'Processing',
     animate: true,
   },
   completed: {
-    icon: CheckCircleIcon,
-    color: 'text-green-500',
-    bg: 'bg-green-50',
+    icon: CheckCircle2,
+    variant: 'success',
     label: 'Ready',
   },
   failed: {
-    icon: ExclamationCircleIcon,
-    color: 'text-red-500',
-    bg: 'bg-red-50',
+    icon: AlertCircle,
+    variant: 'destructive',
     label: 'Failed',
   },
 };
-
 
 const documentTypes = [
   { value: 'annual_report', label: 'Annual Report' },
@@ -76,23 +83,19 @@ interface EditState {
   reporting_period: string;
 }
 
-// Helper to create a distinctive document display name
 function getDocumentDisplayName(doc: Document): string {
   const parts: string[] = [];
   
-  // Start with ticker or company name
   if (doc.company_ticker) {
     parts.push(doc.company_ticker);
   } else {
     parts.push(doc.company_name);
   }
   
-  // Add reporting period if available
   if (doc.reporting_period) {
     parts.push(doc.reporting_period);
   }
   
-  // Add document type abbreviation
   const typeAbbrev: Record<string, string> = {
     annual_report: 'Annual',
     half_year: 'H1',
@@ -109,7 +112,6 @@ function getDocumentDisplayName(doc: Document): string {
   return parts.join(' ');
 }
 
-
 export default function DocumentList({ documents, onDelete, onBulkDelete, onUpdate, isLoading }: DocumentListProps) {
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -125,7 +127,6 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkRetrying, setIsBulkRetrying] = useState(false);
 
-  // Count completed documents in selection (for chat/analyze)
   const completedSelectedIds = Array.from(selectedIds).filter(id => {
     const doc = documents.find(d => d.id === id);
     return doc && doc.status === 'completed';
@@ -134,14 +135,12 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
 
   const handleChatWithSelected = () => {
     if (completedCount === 0) return;
-    // Navigate to multi-doc chat with selected IDs
     const idsParam = completedSelectedIds.join(',');
     navigate(`/chat?documents=${idsParam}`);
   };
 
   const handleAnalyzeSelected = () => {
     if (completedCount === 0) return;
-    // Navigate to comparison/analysis page with selected IDs
     const idsParam = completedSelectedIds.join(',');
     navigate(`/compare?documents=${idsParam}`);
   };
@@ -265,7 +264,6 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
     setIsSaving(false);
   };
 
-  // Count retryable documents in selection (including pending)
   const retryableCount = Array.from(selectedIds).filter(id => {
     const doc = documents.find(d => d.id === id);
     return doc && (doc.status === 'failed' || doc.status === 'processing' || doc.status === 'pending');
@@ -273,22 +271,22 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
 
   if (isLoading) {
     return (
-      <div className="card p-8">
+      <Card className="p-8">
         <div className="flex items-center justify-center">
-          <ArrowPathIcon className="w-8 h-8 text-gray-400 animate-spin" />
-          <span className="ml-3 text-gray-500">Loading documents...</span>
+          <RefreshCw className="w-8 h-8 text-muted-foreground animate-spin" />
+          <span className="ml-3 text-muted-foreground">Loading documents...</span>
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (documents.length === 0) {
     return (
-      <div className="card p-8 text-center">
-        <DocumentTextIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <h3 className="text-lg font-medium text-gray-900 mb-1">No documents yet</h3>
-        <p className="text-sm text-gray-500">Upload your first earnings report to get started.</p>
-      </div>
+      <Card className="p-8 text-center">
+        <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+        <h3 className="text-lg font-medium text-foreground mb-1">No documents yet</h3>
+        <p className="text-sm text-muted-foreground">Upload your first earnings report to get started.</p>
+      </Card>
     );
   }
 
@@ -296,21 +294,17 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
   const someSelected = selectedIds.size > 0;
 
   return (
-    <div className="card overflow-hidden">
+    <Card className="overflow-hidden">
       {/* Header with select all and bulk actions */}
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+      <div className="px-4 py-3 bg-muted/50 border-b">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={allSelected}
-              ref={(el) => {
-                if (el) el.indeterminate = someSelected && !allSelected;
-              }}
-              onChange={toggleSelectAll}
-              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              onCheckedChange={toggleSelectAll}
+              className={someSelected && !allSelected ? "data-[state=checked]:bg-primary" : ""}
             />
-            <h3 className="text-sm font-medium text-gray-700">
+            <h3 className="text-sm font-medium text-muted-foreground">
               {someSelected 
                 ? `${selectedIds.size} selected`
                 : `${documents.length} Document${documents.length !== 1 ? 's' : ''}`
@@ -321,64 +315,69 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
           {/* Bulk actions */}
           {someSelected && (
             <div className="flex items-center space-x-2">
-              {/* Chat with selected - only for completed docs */}
               {completedCount > 0 && (
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={handleChatWithSelected}
-                  className="flex items-center text-xs px-3 py-1.5 bg-primary-100 text-primary-700 rounded-lg hover:bg-primary-200"
                 >
-                  <ChatBubbleLeftRightIcon className="w-3 h-3 mr-1" />
+                  <MessageSquare className="w-3 h-3 mr-1" />
                   Chat ({completedCount})
-                </button>
+                </Button>
               )}
-              {/* Analyze selected - only for completed docs */}
               {completedCount > 1 && (
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={handleAnalyzeSelected}
-                  className="flex items-center text-xs px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                  className="bg-green-100 text-green-700 hover:bg-green-200"
                 >
-                  <ChartBarIcon className="w-3 h-3 mr-1" />
+                  <BarChart3 className="w-3 h-3 mr-1" />
                   Compare ({completedCount})
-                </button>
+                </Button>
               )}
               {retryableCount > 0 && (
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={handleBulkRetry}
                   disabled={isBulkRetrying}
-                  className="flex items-center text-xs px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50"
+                  className="bg-amber-100 text-amber-700 hover:bg-amber-200"
                 >
                   {isBulkRetrying ? (
-                    <ArrowPathIcon className="w-3 h-3 mr-1 animate-spin" />
+                    <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                   ) : (
-                    <ArrowUturnLeftIcon className="w-3 h-3 mr-1" />
+                    <RotateCcw className="w-3 h-3 mr-1" />
                   )}
                   Retry ({retryableCount})
-                </button>
+                </Button>
               )}
-              <button
+              <Button
+                variant="destructive"
+                size="sm"
                 onClick={handleBulkDelete}
                 disabled={isBulkDeleting}
-                className="flex items-center text-xs px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50"
               >
                 {isBulkDeleting ? (
-                  <ArrowPathIcon className="w-3 h-3 mr-1 animate-spin" />
+                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                 ) : (
-                  <TrashIcon className="w-3 h-3 mr-1" />
+                  <Trash2 className="w-3 h-3 mr-1" />
                 )}
                 Delete ({selectedIds.size})
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setSelectedIds(new Set())}
-                className="text-xs text-gray-500 hover:text-gray-700 px-2"
               >
                 Clear
-              </button>
+              </Button>
             </div>
           )}
         </div>
       </div>
       
-      <ul className="divide-y divide-gray-200">
+      <ul className="divide-y divide-border">
         {documents.map((doc) => {
           const status = statusConfig[doc.status];
           const StatusIcon = status.icon;
@@ -388,7 +387,10 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
           return (
             <li 
               key={doc.id} 
-              className={`transition-colors ${isSelected ? 'bg-primary-50' : 'hover:bg-gray-50'}`}
+              className={cn(
+                "transition-colors",
+                isSelected ? "bg-accent/50" : "hover:bg-muted/50"
+              )}
             >
               <div className="px-4 py-4">
                 {isEditing ? (
@@ -396,77 +398,79 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block">
-                          Company Name <span className="text-red-500">*</span>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          Company Name <span className="text-destructive">*</span>
                         </label>
-                        <input
+                        <Input
                           type="text"
                           value={editState.company_name}
                           onChange={(e) => setEditState(s => ({ ...s, company_name: e.target.value }))}
-                          className="input text-sm py-1.5"
                           placeholder="Company name"
                           disabled={isSaving}
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block">Ticker</label>
-                        <input
+                        <label className="text-xs text-muted-foreground mb-1 block">Ticker</label>
+                        <Input
                           type="text"
                           value={editState.company_ticker}
                           onChange={(e) => setEditState(s => ({ ...s, company_ticker: e.target.value.toUpperCase() }))}
-                          className="input text-sm py-1.5"
                           placeholder="e.g., CBA"
                           disabled={isSaving}
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block">Type</label>
-                        <select
+                        <label className="text-xs text-muted-foreground mb-1 block">Type</label>
+                        <Select
                           value={editState.document_type}
-                          onChange={(e) => setEditState(s => ({ ...s, document_type: e.target.value }))}
-                          className="input text-sm py-1.5"
+                          onValueChange={(value) => setEditState(s => ({ ...s, document_type: value }))}
                           disabled={isSaving}
                         >
-                          {documentTypes.map((type) => (
-                            <option key={type.value} value={type.value}>
-                              {type.label}
-                            </option>
-                          ))}
-                        </select>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {documentTypes.map((type) => (
+                              <SelectItem key={type.value} value={type.value}>
+                                {type.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block">Period</label>
-                        <input
+                        <label className="text-xs text-muted-foreground mb-1 block">Period</label>
+                        <Input
                           type="text"
                           value={editState.reporting_period}
                           onChange={(e) => setEditState(s => ({ ...s, reporting_period: e.target.value }))}
-                          className="input text-sm py-1.5"
                           placeholder="e.g., FY24"
                           disabled={isSaving}
                         />
                       </div>
                     </div>
                     <div className="flex justify-end space-x-2">
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={cancelEditing}
                         disabled={isSaving}
-                        className="flex items-center px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-50"
                       >
-                        <XMarkIcon className="w-4 h-4 mr-1" />
+                        <X className="w-4 h-4 mr-1" />
                         Cancel
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        size="sm"
                         onClick={saveEditing}
                         disabled={isSaving || !editState.company_name.trim()}
-                        className="flex items-center px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                       >
                         {isSaving ? (
-                          <ArrowPathIcon className="w-4 h-4 mr-1 animate-spin" />
+                          <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
                         ) : (
-                          <CheckIcon className="w-4 h-4 mr-1" />
+                          <Check className="w-4 h-4 mr-1" />
                         )}
                         Save
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -474,18 +478,28 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
                   <div className="flex items-center">
                     {/* Checkbox */}
                     <div className="flex-shrink-0 mr-3">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={isSelected}
-                        onChange={() => toggleSelect(doc.id)}
-                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        onCheckedChange={() => toggleSelect(doc.id)}
                       />
                     </div>
 
                     {/* Document icon */}
                     <div className="flex-shrink-0">
-                      <div className={`w-10 h-10 ${status.bg} rounded-lg flex items-center justify-center`}>
-                        <DocumentTextIcon className={`w-5 h-5 ${status.color}`} />
+                      <div className={cn(
+                        "w-10 h-10 rounded-lg flex items-center justify-center",
+                        status.variant === 'warning' && "bg-yellow-100",
+                        status.variant === 'info' && "bg-blue-100",
+                        status.variant === 'success' && "bg-green-100",
+                        status.variant === 'destructive' && "bg-red-100"
+                      )}>
+                        <FileText className={cn(
+                          "w-5 h-5",
+                          status.variant === 'warning' && "text-yellow-600",
+                          status.variant === 'info' && "text-blue-600",
+                          status.variant === 'success' && "text-green-600",
+                          status.variant === 'destructive' && "text-red-600"
+                        )} />
                       </div>
                     </div>
                     
@@ -493,11 +507,11 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
                     <div className="ml-4 flex-1 min-w-0">
                       <Link
                         to={`/documents/${doc.id}`}
-                        className="text-sm font-medium text-gray-900 hover:text-primary-600 truncate block"
+                        className="text-sm font-medium text-foreground hover:text-primary truncate block"
                       >
                         {getDocumentDisplayName(doc)}
                       </Link>
-                      <div className="flex items-center mt-1 space-x-3 text-xs text-gray-500">
+                      <div className="flex items-center mt-1 space-x-3 text-xs text-muted-foreground">
                         <span className="truncate max-w-[200px]" title={doc.filename}>
                           {doc.filename}
                         </span>
@@ -512,64 +526,68 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
                     
                     {/* Status */}
                     <div className="ml-4 flex items-center">
-                      <div className={`flex items-center px-2.5 py-1 rounded-full ${status.bg}`}>
+                      <Badge variant={status.variant} className="flex items-center gap-1">
                         <StatusIcon
-                          className={`w-4 h-4 ${status.color} ${status.animate ? 'animate-spin' : ''}`}
+                          className={cn(
+                            "w-3 h-3",
+                            status.animate && "animate-spin"
+                          )}
                         />
-                        <span className={`ml-1.5 text-xs font-medium ${status.color}`}>
-                          {status.label}
-                        </span>
-                      </div>
+                        {status.label}
+                      </Badge>
                     </div>
                     
                     {/* Actions */}
                     <div className="ml-4 flex items-center space-x-2">
                       {doc.status === 'completed' && (
                         <>
-                          <Link
-                            to={`/documents/${doc.id}/analysis`}
-                            className="btn-secondary text-xs px-3 py-1.5"
-                          >
-                            Analysis
-                          </Link>
-                          <Link
-                            to={`/documents/${doc.id}/chat`}
-                            className="btn-primary text-xs px-3 py-1.5"
-                          >
-                            Chat
-                          </Link>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link to={`/documents/${doc.id}/analysis`}>
+                              Analysis
+                            </Link>
+                          </Button>
+                          <Button size="sm" asChild>
+                            <Link to={`/documents/${doc.id}/chat`}>
+                              Chat
+                            </Link>
+                          </Button>
                         </>
                       )}
                       {(doc.status === 'failed' || doc.status === 'processing' || doc.status === 'pending') && (
-                        <button
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => handleRetry(doc)}
                           disabled={retryingId === doc.id}
-                          className="flex items-center text-xs px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50"
+                          className="bg-amber-100 text-amber-700 hover:bg-amber-200"
                           title={doc.status === 'pending' ? 'Start processing' : 'Retry processing'}
                         >
                           {retryingId === doc.id ? (
-                            <ArrowPathIcon className="w-3 h-3 mr-1 animate-spin" />
+                            <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                           ) : (
-                            <ArrowUturnLeftIcon className="w-3 h-3 mr-1" />
+                            <RotateCcw className="w-3 h-3 mr-1" />
                           )}
                           {doc.status === 'pending' ? 'Process' : 'Retry'}
-                        </button>
+                        </Button>
                       )}
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => startEditing(doc)}
-                        className="p-1.5 text-gray-400 hover:text-primary-500 transition-colors"
                         title="Edit document"
                       >
-                        <PencilIcon className="w-4 h-4" />
-                      </button>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       {onDelete && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => onDelete(doc.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
                           title="Delete document"
+                          className="text-muted-foreground hover:text-destructive"
                         >
-                          <TrashIcon className="w-4 h-4" />
-                        </button>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -579,6 +597,6 @@ export default function DocumentList({ documents, onDelete, onBulkDelete, onUpda
           );
         })}
       </ul>
-    </div>
+    </Card>
   );
 }

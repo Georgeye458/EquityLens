@@ -1,7 +1,7 @@
 """Chat service for document Q&A with full context access."""
 
 import logging
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, AsyncIterator
 from datetime import datetime
 
 from sqlalchemy import select
@@ -298,6 +298,166 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
         await db.refresh(assistant_msg)
 
         return user_msg, assistant_msg
+
+    async def send_message_stream(
+        self,
+        db: AsyncSession,
+        session_id: int,
+        user_message: str,
+        model: str = "llama-4",
+    ) -> AsyncIterator[str]:
+        """
+        Send a user message and stream AI response.
+
+        Args:
+            db: Database session
+            session_id: Chat session ID
+            user_message: User's question
+            model: Model to use for response
+
+        Yields:
+            Text chunks as they are generated
+        """
+        import time
+        start_time = time.time()
+        
+        # Get session
+        session_start = time.time()
+        session = await self.get_session(db, session_id)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        logger.info(f"Chat stream: get_session took {time.time() - session_start:.3f}s")
+
+        # Save user message (no need to wait for commit)
+        msg_start = time.time()
+        user_msg = ChatMessage(
+            session_id=session_id,
+            role="user",
+            content=user_message,
+        )
+        db.add(user_msg)
+        await db.commit()
+        logger.info(f"Chat stream: save message took {time.time() - msg_start:.3f}s")
+
+        # Get document IDs from session
+        document_ids = session.get_document_ids()
+        logger.info(f"Chat stream: session setup took {time.time() - start_time:.3f}s")
+        
+        if not document_ids:
+            raise ValueError("No documents associated with this session")
+        
+        # Get document info for citations
+        doc_info = await self._get_document_info(db, document_ids)
+
+        retrieval_start = time.time()
+        # Retrieve relevant chunks - use multi-document search if multiple docs
+        if len(document_ids) == 1:
+            retrieved = await vector_store.search(
+                db=db,
+                query=user_message,
+                document_id=document_ids[0],
+                top_k=10,
+            )
+        else:
+            # Search across multiple documents
+            retrieved = await vector_store.search_multiple_documents(
+                db=db,
+                query=user_message,
+                document_ids=document_ids,
+                top_k=15,  # Get more when searching multiple docs
+            )
+        
+        logger.info(f"Chat stream: retrieval took {time.time() - retrieval_start:.3f}s")
+
+        # Build context from retrieved chunks with document identifiers
+        context_parts = []
+        citations = []
+
+        for chunk, score in retrieved:
+            doc = doc_info.get(chunk.document_id)
+            doc_label = get_document_label(doc) if doc else f"Doc {chunk.document_id}"
+            
+            context_parts.append(
+                f"[{doc_label} - Page {chunk.page_number}]\n{chunk.content}"
+            )
+            citations.append({
+                "page_number": chunk.page_number,
+                "text": chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
+                "relevance_score": score,
+                "document_id": chunk.document_id,
+                "document_name": doc_label,
+            })
+
+        context = "\n\n---\n\n".join(context_parts)
+        
+        # Build document list for context
+        doc_list = ", ".join([
+            get_document_label(doc_info[did])
+            for did in document_ids if did in doc_info
+        ])
+
+        # Get conversation history (optimized: limit query to last 10)
+        history_start = time.time()
+        result = await db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at.desc())
+            .limit(10)
+        )
+        recent_messages = list(reversed(result.scalars().all()))
+        logger.info(f"Chat stream: load history took {time.time() - history_start:.3f}s")
+        
+        messages = []
+
+        # Add recent history (already limited, exclude current message)
+        for msg in recent_messages[:-1]:
+            messages.append({
+                "role": msg.role,
+                "content": msg.content,
+            })
+
+        # Add current query with context
+        context_intro = f"Context from documents ({doc_list}):" if len(document_ids) > 1 else "Context from the document:"
+        
+        messages.append({
+            "role": "user",
+            "content": f"""{context_intro}
+
+{context}
+
+---
+
+Question: {user_message}
+
+Please provide a thorough answer with citations in the format [TICKER - Page X].""",
+        })
+        
+        logger.info(f"Chat stream: total prep took {time.time() - start_time:.3f}s, starting LLM stream...")
+
+        # Stream response
+        full_response = ""
+        async for chunk in scx_client.chat_completion_stream(
+            messages=messages,
+            model=model,
+            system_prompt=CHAT_SYSTEM_PROMPT,
+            temperature=0.7,
+        ):
+            full_response += chunk
+            yield chunk
+
+        # Extract citations from complete response
+        response_citations = self._extract_citations_from_response(full_response, citations)
+
+        # Save assistant message after streaming completes
+        assistant_msg = ChatMessage(
+            session_id=session_id,
+            role="assistant",
+            content=full_response,
+            citations=response_citations,
+            retrieved_chunks=[{"document_id": c["document_id"], "page": c["page_number"]} for c in citations],
+        )
+        db.add(assistant_msg)
+        await db.commit()
 
     def _extract_citations_from_response(
         self,

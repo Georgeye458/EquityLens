@@ -8,6 +8,7 @@ interface UseAnalysisReturn {
   categories: POIsByCategory[];
   isLoading: boolean;
   isAnalyzing: boolean;
+  statusMessage: string | null;
   error: string | null;
   startAnalysis: (documentId: number, model?: string) => Promise<void>;
   fetchAnalysis: (documentId: number) => Promise<void>;
@@ -19,6 +20,7 @@ export function useAnalysis(): UseAnalysisReturn {
   const [categories, setCategories] = useState<POIsByCategory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pollingAnalysisId, setPollingAnalysisId] = useState<number | null>(null);
 
@@ -29,22 +31,34 @@ export function useAnalysis(): UseAnalysisReturn {
 
       try {
         const status = await analysisApi.getStatus(pollingAnalysisId);
-        
+        setStatusMessage(status.message ?? null);
+
         if (status.status === 'completed') {
           const fullAnalysis = await analysisApi.get(pollingAnalysisId);
           setAnalysis(fullAnalysis);
+          
+          // Fetch POIs now that analysis is complete
+          try {
+            const pois = await analysisApi.getPoisByCategory(fullAnalysis.document_id);
+            setCategories(pois);
+          } catch (err) {
+            console.error('Failed to fetch POIs:', err);
+          }
+          
           setIsAnalyzing(false);
+          setStatusMessage(null);
           setPollingAnalysisId(null);
           return true;
         }
-        
+
         if (status.status === 'failed') {
           setError('Analysis failed');
           setIsAnalyzing(false);
+          setStatusMessage(null);
           setPollingAnalysisId(null);
           return true;
         }
-        
+
         return false;
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Polling failed');
@@ -59,6 +73,7 @@ export function useAnalysis(): UseAnalysisReturn {
   const startAnalysis = useCallback(async (documentId: number, model: string = 'llama-4') => {
     setIsAnalyzing(true);
     setError(null);
+    setStatusMessage('Extracting key points and generating summary…');
 
     try {
       const result = await analysisApi.start(documentId, model);
@@ -66,6 +81,7 @@ export function useAnalysis(): UseAnalysisReturn {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start analysis');
       setIsAnalyzing(false);
+      setStatusMessage(null);
     }
   }, []);
 
@@ -107,6 +123,7 @@ export function useAnalysis(): UseAnalysisReturn {
     categories,
     isLoading,
     isAnalyzing,
+    statusMessage,
     error,
     startAnalysis,
     fetchAnalysis,

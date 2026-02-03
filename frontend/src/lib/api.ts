@@ -7,6 +7,8 @@ import type {
   ChatSession,
   ChatResponse,
   ApiError,
+  Report,
+  ReportSummary,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -212,6 +214,7 @@ export const analysisApi = {
   getStatus: async (analysisId: number): Promise<{
     id: number;
     status: string;
+    message?: string;
     poi_count: number;
     processing_time_seconds: number | null;
     completed_at: string | null;
@@ -278,6 +281,69 @@ export const chatApi = {
     }
   },
 
+  sendMessageStream: async (
+    sessionId: number,
+    content: string,
+    model: string = 'llama-4',
+    onChunk: (chunk: string) => void,
+    onDone?: () => void,
+    onError?: (error: string) => void
+  ): Promise<void> => {
+    const url = `${api.defaults.baseURL}/chat/sessions/${sessionId}/messages/stream?model=${model}`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === 'content') {
+                onChunk(data.data);
+              } else if (data.type === 'done') {
+                onDone?.();
+              } else if (data.type === 'error') {
+                onError?.(data.error);
+              }
+            } catch (e) {
+              // Ignore JSON parse errors for incomplete chunks
+            }
+          }
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      onError?.(message);
+      throw error;
+    }
+  },
+
   quickChat: async (
     documentId: number,
     content: string,
@@ -315,6 +381,75 @@ export const chatApi = {
   deleteSession: async (sessionId: number): Promise<void> => {
     try {
       await api.delete(`/chat/sessions/${sessionId}`);
+    } catch (error) {
+      throw handleError(error as AxiosError<ApiError>);
+    }
+  },
+
+  preloadCache: async (documentId: number): Promise<{ status: string }> => {
+    try {
+      const response = await api.post(`/chat/preload/${documentId}`);
+      return response.data;
+    } catch (error) {
+      // Don't throw - preload is optional optimization
+      console.warn('Cache preload failed:', error);
+      return { status: 'failed' };
+    }
+  },
+};
+
+// Reports API
+export const reportsApi = {
+  generate: async (
+    documentId: number,
+    model: string = 'llama-4'
+  ): Promise<ReportSummary> => {
+    try {
+      const response = await api.post(`/reports/${documentId}/generate`, {
+        model,
+      });
+      return response.data;
+    } catch (error) {
+      throw handleError(error as AxiosError<ApiError>);
+    }
+  },
+
+  getLatest: async (documentId: number): Promise<Report> => {
+    try {
+      const response = await api.get(`/reports/${documentId}/latest`);
+      return response.data;
+    } catch (error) {
+      throw handleError(error as AxiosError<ApiError>);
+    }
+  },
+
+  get: async (reportId: number): Promise<Report> => {
+    try {
+      const response = await api.get(`/reports/detail/${reportId}`);
+      return response.data;
+    } catch (error) {
+      throw handleError(error as AxiosError<ApiError>);
+    }
+  },
+
+  getStatus: async (documentId: number): Promise<{
+    id: number;
+    status: string;
+    processing_time_seconds: number | null;
+    error_message: string | null;
+  }> => {
+    try {
+      const response = await api.get(`/reports/${documentId}/status`);
+      return response.data;
+    } catch (error) {
+      throw handleError(error as AxiosError<ApiError>);
+    }
+  },
+
+  getAll: async (documentId: number): Promise<ReportSummary[]> => {
+    try {
+      const response = await api.get(`/reports/${documentId}/all`);
+      return response.data;
     } catch (error) {
       throw handleError(error as AxiosError<ApiError>);
     }

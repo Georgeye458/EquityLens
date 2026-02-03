@@ -14,8 +14,8 @@ from app.services.scx_client import scx_client
 
 logger = logging.getLogger(__name__)
 
-# Master prompt for POI extraction based on requirements
-POI_EXTRACTION_PROMPT = """You are an expert equity analyst assistant. Your task is to extract key Points of Interest (POIs) from earnings report documents.
+# Master prompt for POI extraction + executive summary in one response
+POI_EXTRACTION_PROMPT = """You are an expert equity analyst assistant. Your task is to extract key Points of Interest (POIs) from earnings report documents AND write a concise executive summary in a single response.
 
 For each POI, provide:
 1. The extracted value(s) - use the exact figures from the document
@@ -58,7 +58,11 @@ Extract the following categories of information:
 - Cash vs accrual comparison
 - Revenue recognition notes
 
-Respond with a JSON object containing an array of POIs. Each POI should have:
+Respond with a single JSON object containing:
+1. "pois": an array of POIs (each with category, name, description, output_type, value, citations, confidence)
+2. "executive_summary": a 3-5 paragraph executive summary in professional analyst tone covering: key financial performance, notable changes from prior period, management outlook and guidance, and any red flags or areas of concern
+
+Each POI should have:
 - category: one of [financial_metrics, segment_analysis, cash_flow, management_commentary, earnings_quality]
 - name: specific metric name
 - description: brief description of what this represents
@@ -84,7 +88,8 @@ Example response format:
       "citations": [{"page_number": 2, "text": "Revenue of $5.2 billion, up 8.3%"}],
       "confidence": "high"
     }
-  ]
+  ],
+  "executive_summary": "First paragraph covering key financial performance...\\n\\nSecond paragraph on changes from prior period...\\n\\nThird paragraph on outlook and guidance...\\n\\nFourth paragraph on red flags if any."
 }"""
 
 
@@ -143,15 +148,29 @@ class POIExtractor:
 
         full_context = "\n\n".join(doc_context)
 
-        # Create analysis record
-        analysis = Analysis(
-            document_id=document_id,
-            status="processing",
-            model_used=model,
+        # Get existing analysis record (created by endpoint)
+        result = await db.execute(
+            select(Analysis)
+            .where(Analysis.document_id == document_id)
+            .order_by(Analysis.created_at.desc())
+            .limit(1)
         )
-        db.add(analysis)
-        await db.commit()
-        await db.refresh(analysis)
+        analysis = result.scalar_one_or_none()
+        
+        if not analysis:
+            # Fallback: create if somehow doesn't exist
+            analysis = Analysis(
+                document_id=document_id,
+                status="processing",
+                model_used=model,
+            )
+            db.add(analysis)
+            await db.commit()
+            await db.refresh(analysis)
+        else:
+            # Update status to processing
+            analysis.status = "processing"
+            await db.commit()
 
         try:
             # Extract POIs using LLM
@@ -178,8 +197,8 @@ Please extract all relevant POIs following the specified format.""",
                 temperature=0.3,  # Lower temperature for factual extraction
             )
 
-            # Parse response
-            pois_data = self._parse_poi_response(response)
+            # Parse single response: pois + executive_summary
+            pois_data, summary = self._parse_extraction_response(response)
 
             # Create POI records
             for poi_data in pois_data:
@@ -195,12 +214,7 @@ Please extract all relevant POIs following the specified format.""",
                 )
                 db.add(poi)
 
-            # Generate summary
-            summary = await self._generate_summary(
-                db, document, pois_data, model
-            )
-
-            # Update analysis
+            # Update analysis (summary from same LLM response)
             end_time = datetime.utcnow()
             analysis.status = "completed"
             analysis.summary = summary
@@ -219,35 +233,40 @@ Please extract all relevant POIs following the specified format.""",
             await db.commit()
             raise
 
-    def _parse_poi_response(self, response: str) -> List[Dict[str, Any]]:
-        """Parse the LLM response to extract POI data."""
+    def _parse_extraction_response(
+        self, response: str
+    ) -> tuple[List[Dict[str, Any]], str]:
+        """Parse the LLM response to extract POIs and executive_summary in one go."""
         try:
-            # Try to extract JSON from response
-            # Look for JSON block
             if "```json" in response:
                 json_start = response.find("```json") + 7
                 json_end = response.find("```", json_start)
                 json_str = response[json_start:json_end].strip()
             elif "{" in response:
-                # Find the JSON object
                 json_start = response.find("{")
                 json_end = response.rfind("}") + 1
                 json_str = response[json_start:json_end]
             else:
-                return []
+                return [], ""
 
             data = json.loads(json_str)
 
-            if isinstance(data, dict) and "pois" in data:
-                return data["pois"]
-            elif isinstance(data, list):
-                return data
-            else:
-                return []
+            if not isinstance(data, dict):
+                return [], ""
+
+            pois_data = []
+            if "pois" in data and isinstance(data["pois"], list):
+                pois_data = data["pois"]
+
+            summary = ""
+            if "executive_summary" in data and isinstance(data["executive_summary"], str):
+                summary = data["executive_summary"].strip()
+
+            return pois_data, summary
 
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse POI response as JSON: {e}")
-            return []
+            logger.warning(f"Failed to parse extraction response as JSON: {e}")
+            return [], ""
 
     def _parse_confidence(self, confidence: Optional[str]) -> Optional[float]:
         """Convert confidence string to float."""
@@ -260,48 +279,6 @@ Please extract all relevant POIs following the specified format.""",
             "low": 0.5,
         }
         return confidence_map.get(confidence.lower(), 0.7)
-
-    async def _generate_summary(
-        self,
-        db: AsyncSession,
-        document: Document,
-        pois: List[Dict[str, Any]],
-        model: str,
-    ) -> str:
-        """Generate a narrative summary of key findings."""
-        # Build a summary of extracted POIs for the summary prompt
-        poi_summary = []
-        for poi in pois[:20]:  # Limit to top 20 for summary
-            poi_summary.append(
-                f"- {poi.get('name')}: {poi.get('value')}"
-            )
-
-        poi_text = "\n".join(poi_summary) if poi_summary else "No POIs extracted"
-
-        messages = [
-            {
-                "role": "user",
-                "content": f"""Based on these extracted Points of Interest from {document.company_name}'s earnings report, 
-write a concise executive summary (3-5 paragraphs) highlighting:
-1. Key financial performance
-2. Notable changes from prior period
-3. Management outlook and guidance
-4. Any red flags or areas of concern
-
-Extracted POIs:
-{poi_text}
-
-Write the summary in a professional analyst tone.""",
-            }
-        ]
-
-        summary = await scx_client.chat_completion(
-            messages=messages,
-            model=model,
-            temperature=0.5,
-        )
-
-        return summary
 
 
 # Singleton instance

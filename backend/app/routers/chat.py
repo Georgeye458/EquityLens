@@ -1,14 +1,18 @@
 """Chat API routes for document Q&A."""
 
 from typing import List, Optional
+import json
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.database import get_db
 from app.services.chat_service import chat_service
+from app.services.vector_store import vector_store
 from app.models.document import Document, ProcessingStatus
 from app.models.chat import (
     ChatSession,
@@ -128,7 +132,7 @@ async def send_message(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Send a message and get AI response.
+    Send a message and get AI response (non-streaming).
 
     The AI will search the FULL document content to answer your question,
     not just the extracted POIs.
@@ -152,6 +156,55 @@ async def send_message(
         raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
 
 
+@router.post("/sessions/{session_id}/messages/stream")
+async def send_message_stream(
+    session_id: int,
+    message: ChatMessageCreate,
+    model: str = "llama-4",
+):
+    """
+    Send a message and get streaming AI response.
+
+    Returns Server-Sent Events (SSE) for real-time streaming.
+    
+    Note: Creates its own database session to avoid FastAPI closing the session
+    before streaming completes.
+    """
+    async def generate():
+        # Create independent DB session for the generator's lifetime
+        from app.services.database import async_session
+        
+        async with async_session() as db:
+            try:
+                async for chunk in chat_service.send_message_stream(
+                    db=db,
+                    session_id=session_id,
+                    user_message=message.content,
+                    model=model,
+                ):
+                    # Send as SSE format
+                    yield f"data: {json.dumps({'type': 'content', 'data': chunk})}\n\n"
+                    await asyncio.sleep(0)  # Allow other tasks to run
+                
+                # Send completion signal
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                
+            except ValueError as e:
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'error': f'Chat error: {str(e)}'})}\n\n"
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_chat_session(
     session_id: int,
@@ -167,6 +220,38 @@ async def delete_chat_session(
     await db.commit()
 
     return {"message": "Chat session deleted successfully"}
+
+
+@router.post("/preload/{document_id}")
+async def preload_document_cache(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Preload document embeddings into memory cache.
+    Call this when entering chat page to make first query instant.
+    Returns immediately if already cached.
+    """
+    # Check if already cached (instant return)
+    if vector_store.is_cached(document_id):
+        return {"status": "already_cached", "document_id": document_id}
+    
+    # Verify document exists
+    result = await db.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    document = result.scalar_one_or_none()
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Preload cache in background (non-blocking for frontend)
+    loaded = await vector_store.preload_cache(db, document_id)
+    
+    return {
+        "status": "loaded" if loaded else "no_chunks",
+        "document_id": document_id,
+    }
 
 
 @router.post("/quick/{document_id}", response_model=ChatResponse)

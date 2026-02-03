@@ -3,42 +3,63 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  
   html {
     @apply antialiased;
   }
   
   body {
-    @apply bg-gray-50 text-gray-900;
-  }
-}
-
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2;
-  }
-  
-  .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
-  }
-  
-  .btn-secondary {
-    @apply btn bg-white text-gray-700 border-gray-300 hover:bg-gray-50 focus:ring-primary-500;
-  }
-  
-  .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
-  }
-  
-  .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-200;
-  }
-  
-  .input {
-    @apply block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm;
-  }
-  
-  .label {
-    @apply block text-sm font-medium text-gray-700;
+    @apply bg-background text-foreground;
   }
 }
 
@@ -49,11 +70,11 @@
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100 rounded-full;
+  @apply bg-muted rounded-full;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded-full hover:bg-gray-400;
+  @apply bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50;
 }
 
 /* Loading animation */
@@ -70,7 +91,7 @@
 
 .loading-pulse::before {
   content: '';
-  @apply absolute inset-0 rounded-full bg-primary-400;
+  @apply absolute inset-0 rounded-full bg-primary/40;
   animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
 }
 
@@ -92,40 +113,40 @@
 
 /* Citation hover effect */
 .citation {
-  @apply inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-700 cursor-pointer transition-colors hover:bg-primary-200;
+  @apply inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground cursor-pointer transition-colors hover:bg-accent;
 }
 
 /* Markdown table styling for chat responses */
 .prose table {
-  @apply w-full text-sm border-collapse border border-gray-300 my-4;
+  @apply w-full text-sm border-collapse border border-border my-4;
   display: block;
   overflow-x: auto;
   white-space: nowrap;
 }
 
 .prose thead {
-  @apply bg-gray-100;
+  @apply bg-muted;
 }
 
 .prose th {
-  @apply px-3 py-2 text-left font-semibold text-gray-900 border border-gray-300 bg-gray-100;
+  @apply px-3 py-2 text-left font-semibold text-foreground border border-border bg-muted;
 }
 
 .prose td {
-  @apply px-3 py-2 text-gray-700 border border-gray-200;
+  @apply px-3 py-2 text-muted-foreground border border-border;
 }
 
 .prose tbody tr:nth-child(even) {
-  @apply bg-gray-50;
+  @apply bg-muted/50;
 }
 
 .prose tbody tr:hover {
-  @apply bg-blue-50;
+  @apply bg-accent/50;
 }
 
 /* Make prose headings more visible */
 .prose h1, .prose h2, .prose h3, .prose h4 {
-  @apply font-bold text-gray-900 mt-4 mb-2;
+  @apply font-bold text-foreground mt-4 mb-2;
 }
 
 .prose h3 {
@@ -147,18 +168,18 @@
 
 /* Bold text styling */
 .prose strong {
-  @apply font-semibold text-gray-900;
+  @apply font-semibold text-foreground;
 }
 
 /* Code blocks */
 .prose code {
-  @apply bg-gray-100 px-1 py-0.5 rounded text-sm text-gray-800;
+  @apply bg-muted px-1 py-0.5 rounded text-sm text-foreground;
 }
 
 .prose pre {
-  @apply bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4;
+  @apply bg-neutral-900 text-neutral-100 p-4 rounded-lg overflow-x-auto my-4;
 }
 
 .prose pre code {
-  @apply bg-transparent p-0 text-gray-100;
+  @apply bg-transparent p-0 text-neutral-100;
 }

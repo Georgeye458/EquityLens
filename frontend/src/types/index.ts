@@ -110,6 +110,36 @@ export interface ChatResponse {
   session_id: number;
 }
 
+// Report types
+export interface Report {
+  id: number;
+  document_id: number;
+  company_name: string | null;
+  reporting_period: string | null;
+  status: ReportStatus;
+  error_message: string | null;
+  content: string | null;
+  model_used: string | null;
+  tokens_used: number | null;
+  processing_time_seconds: number | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ReportSummary {
+  id: number;
+  document_id: number;
+  company_name: string | null;
+  reporting_period: string | null;
+  status: ReportStatus;
+  model_used: string | null;
+  processing_time_seconds: number | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export type ReportStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
 // API response types
 export interface ApiError {
   detail: string;

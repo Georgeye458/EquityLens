@@ -96,20 +96,64 @@ export function useChat(): UseChatReturn {
     };
     setMessages((prev) => [...prev, tempUserMessage]);
 
+    // Add placeholder for streaming assistant message
+    const tempAssistantId = Date.now() + 1;
+    const tempAssistantMessage: ChatMessage = {
+      id: tempAssistantId,
+      role: 'assistant',
+      content: '',
+      citations: null,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempAssistantMessage]);
+
     try {
-      const response = await chatApi.sendMessage(session.id, content, model);
-      
-      // Replace temp message with real response and add assistant message
-      setMessages((prev) => [
-        ...prev.slice(0, -1), // Remove temp message
-        { ...tempUserMessage, id: response.message.id - 1 }, // Add real user message
-        response.message, // Add assistant response
-      ]);
+      // Use streaming API
+      await chatApi.sendMessageStream(
+        session.id,
+        content,
+        model,
+        // onChunk: append to assistant message
+        (chunk: string) => {
+          setMessages((prev) => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant') {
+              return [
+                ...prev.slice(0, -1),
+                { ...lastMsg, content: lastMsg.content + chunk },
+              ];
+            }
+            return prev;
+          });
+        },
+        // onDone
+        () => {
+          setIsSending(false);
+        },
+        // onError: keep user message, only remove empty assistant placeholder
+        (errorMsg: string) => {
+          setError(errorMsg);
+          // Remove only the assistant placeholder, keep user message
+          setMessages((prev) => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === '') {
+              return prev.slice(0, -1);
+            }
+            return prev;
+          });
+          setIsSending(false);
+        }
+      );
     } catch (err) {
-      // Remove optimistic message on error
-      setMessages((prev) => prev.slice(0, -1));
+      // Remove only the empty assistant placeholder, keep user message
+      setMessages((prev) => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === '') {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
       setError(err instanceof Error ? err.message : 'Failed to send message');
-    } finally {
       setIsSending(false);
     }
   }, [session]);

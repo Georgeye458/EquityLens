@@ -5,6 +5,7 @@ import asyncio
 from typing import List, Dict, Any, Optional, Tuple
 import logging
 import numpy as np
+from functools import lru_cache
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +22,7 @@ class VectorStore:
     def __init__(self):
         """Initialize the vector store."""
         self.embedding_dim = 1536  # Typical embedding dimension
+        self._embedding_cache: Dict[int, Tuple[List, np.ndarray]] = {}  # document_id -> (chunks, embeddings_matrix)
 
     async def add_chunks(
         self,
@@ -149,7 +151,7 @@ class VectorStore:
         top_k: int = 5,
     ) -> List[Tuple[DocumentChunk, float]]:
         """
-        Search for similar chunks using vector similarity.
+        Search for similar chunks using vector similarity (optimized with vectorized ops).
 
         Args:
             db: Database session
@@ -160,37 +162,71 @@ class VectorStore:
         Returns:
             List of (chunk, similarity_score) tuples
         """
+        import time
+        search_start = time.time()
+        
         # Get query embedding
+        embed_start = time.time()
         query_embedding = await scx_client.create_embedding(query)
+        logger.info(f"Vector search: embedding took {time.time() - embed_start:.3f}s")
 
-        # Get all chunks for the document
-        result = await db.execute(
-            select(DocumentChunk)
-            .where(DocumentChunk.document_id == document_id)
-            .where(DocumentChunk.embedding.isnot(None))
-        )
-        chunks = result.scalars().all()
+        # Check cache first
+        db_start = time.time()
+        if document_id in self._embedding_cache:
+            chunks, chunk_embeddings = self._embedding_cache[document_id]
+            logger.info(f"Vector search: loaded from CACHE in {time.time() - db_start:.3f}s for {len(chunks)} chunks")
+        else:
+            # Get all chunks for the document
+            result = await db.execute(
+                select(DocumentChunk)
+                .where(DocumentChunk.document_id == document_id)
+                .where(DocumentChunk.embedding.isnot(None))
+            )
+            chunks = result.scalars().all()
+            
+            if not chunks:
+                return []
+            
+            # Build embeddings matrix and cache it
+            chunk_embeddings = np.array([chunk.embedding for chunk in chunks])
+            self._embedding_cache[document_id] = (chunks, chunk_embeddings)
+            logger.info(f"Vector search: DB query + load took {time.time() - db_start:.3f}s for {len(chunks)} chunks (CACHED for next time)")
 
         if not chunks:
             return []
 
-        # Calculate cosine similarity
-        scored_chunks = []
+        # Vectorized similarity calculation (MUCH faster than loop)
+        calc_start = time.time()
         query_vec = np.array(query_embedding)
         query_norm = np.linalg.norm(query_vec)
+        
+        if query_norm == 0:
+            return []
 
-        for chunk in chunks:
-            if chunk.embedding:
-                chunk_vec = np.array(chunk.embedding)
-                chunk_norm = np.linalg.norm(chunk_vec)
-
-                if query_norm > 0 and chunk_norm > 0:
-                    similarity = np.dot(query_vec, chunk_vec) / (query_norm * chunk_norm)
-                    scored_chunks.append((chunk, float(similarity)))
-
-        # Sort by similarity and return top_k
-        scored_chunks.sort(key=lambda x: x[1], reverse=True)
-        return scored_chunks[:top_k]
+        # chunk_embeddings already loaded from cache or DB
+        
+        # Normalize query vector
+        query_normalized = query_vec / query_norm
+        
+        # Compute all similarities at once (vectorized)
+        chunk_norms = np.linalg.norm(chunk_embeddings, axis=1)
+        
+        # Avoid division by zero
+        valid_mask = chunk_norms > 0
+        similarities = np.zeros(len(chunks))
+        
+        if valid_mask.any():
+            chunk_embeddings_normalized = chunk_embeddings[valid_mask] / chunk_norms[valid_mask, np.newaxis]
+            similarities[valid_mask] = np.dot(chunk_embeddings_normalized, query_normalized)
+        
+        # Get top_k indices
+        top_indices = np.argsort(similarities)[::-1][:top_k]
+        
+        logger.info(f"Vector search: similarity calculation took {time.time() - calc_start:.3f}s")
+        logger.info(f"Vector search: TOTAL took {time.time() - search_start:.3f}s")
+        
+        # Return chunks with scores
+        return [(chunks[i], float(similarities[i])) for i in top_indices]
 
     async def search_multiple_documents(
         self,
@@ -200,7 +236,7 @@ class VectorStore:
         top_k: int = 5,
     ) -> List[Tuple[DocumentChunk, float]]:
         """
-        Search across multiple documents.
+        Search across multiple documents (optimized with vectorized ops).
 
         Args:
             db: Database session
@@ -214,34 +250,63 @@ class VectorStore:
         # Get query embedding
         query_embedding = await scx_client.create_embedding(query)
 
-        # Get chunks for all specified documents
-        result = await db.execute(
-            select(DocumentChunk)
-            .where(DocumentChunk.document_id.in_(document_ids))
-            .where(DocumentChunk.embedding.isnot(None))
-        )
-        chunks = result.scalars().all()
-
-        if not chunks:
+        # Get chunks from cache or DB for each document
+        all_chunks = []
+        all_embeddings = []
+        
+        for doc_id in document_ids:
+            if doc_id in self._embedding_cache:
+                chunks, embeddings = self._embedding_cache[doc_id]
+                all_chunks.extend(chunks)
+                all_embeddings.append(embeddings)
+            else:
+                # Load from DB
+                result = await db.execute(
+                    select(DocumentChunk)
+                    .where(DocumentChunk.document_id == doc_id)
+                    .where(DocumentChunk.embedding.isnot(None))
+                )
+                chunks = result.scalars().all()
+                if chunks:
+                    embeddings = np.array([chunk.embedding for chunk in chunks])
+                    self._embedding_cache[doc_id] = (chunks, embeddings)
+                    all_chunks.extend(chunks)
+                    all_embeddings.append(embeddings)
+        
+        if not all_chunks:
             return []
+        
+        chunks = all_chunks
+        chunk_embeddings = np.vstack(all_embeddings) if len(all_embeddings) > 1 else all_embeddings[0]
 
-        # Calculate cosine similarity
-        scored_chunks = []
+        # Vectorized similarity calculation (MUCH faster than loop)
         query_vec = np.array(query_embedding)
         query_norm = np.linalg.norm(query_vec)
+        
+        if query_norm == 0:
+            return []
 
-        for chunk in chunks:
-            if chunk.embedding:
-                chunk_vec = np.array(chunk.embedding)
-                chunk_norm = np.linalg.norm(chunk_vec)
-
-                if query_norm > 0 and chunk_norm > 0:
-                    similarity = np.dot(query_vec, chunk_vec) / (query_norm * chunk_norm)
-                    scored_chunks.append((chunk, float(similarity)))
-
-        # Sort by similarity and return top_k
-        scored_chunks.sort(key=lambda x: x[1], reverse=True)
-        return scored_chunks[:top_k]
+        # chunk_embeddings already loaded from cache or DB
+        
+        # Normalize query vector
+        query_normalized = query_vec / query_norm
+        
+        # Compute all similarities at once (vectorized)
+        chunk_norms = np.linalg.norm(chunk_embeddings, axis=1)
+        
+        # Avoid division by zero
+        valid_mask = chunk_norms > 0
+        similarities = np.zeros(len(chunks))
+        
+        if valid_mask.any():
+            chunk_embeddings_normalized = chunk_embeddings[valid_mask] / chunk_norms[valid_mask, np.newaxis]
+            similarities[valid_mask] = np.dot(chunk_embeddings_normalized, query_normalized)
+        
+        # Get top_k indices
+        top_indices = np.argsort(similarities)[::-1][:top_k]
+        
+        # Return chunks with scores
+        return [(chunks[i], float(similarities[i])) for i in top_indices]
 
     async def get_document_chunks(
         self,
@@ -255,6 +320,43 @@ class VectorStore:
             .order_by(DocumentChunk.chunk_index)
         )
         return result.scalars().all()
+
+    async def preload_cache(
+        self,
+        db: AsyncSession,
+        document_id: int,
+    ) -> bool:
+        """
+        Preload embeddings into cache for a document.
+        Call this when chat page loads to make first query instant.
+        
+        Returns True if loaded, False if already cached.
+        """
+        if document_id in self._embedding_cache:
+            logger.info(f"Preload: document {document_id} already in cache")
+            return False
+        
+        import time
+        start = time.time()
+        
+        result = await db.execute(
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == document_id)
+            .where(DocumentChunk.embedding.isnot(None))
+        )
+        chunks = result.scalars().all()
+        
+        if chunks:
+            chunk_embeddings = np.array([chunk.embedding for chunk in chunks])
+            self._embedding_cache[document_id] = (chunks, chunk_embeddings)
+            logger.info(f"Preload: cached {len(chunks)} chunks for document {document_id} in {time.time() - start:.3f}s")
+            return True
+        
+        return False
+
+    def is_cached(self, document_id: int) -> bool:
+        """Check if document embeddings are in cache."""
+        return document_id in self._embedding_cache
 
 
 # Singleton instance

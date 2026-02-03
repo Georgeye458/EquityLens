@@ -249,9 +249,20 @@ async def get_analysis_status(
     )
     pois = poi_result.scalars().all()
 
+    # Human-readable message for incremental UX
+    if analysis.status == "processing" or analysis.status == "pending":
+        message = "Extracting key points and generating summary…"
+    elif analysis.status == "completed":
+        message = "Complete"
+    elif analysis.status == "failed":
+        message = "Failed"
+    else:
+        message = analysis.status
+
     return {
         "id": analysis.id,
         "status": analysis.status,
+        "message": message,
         "poi_count": len(pois),
         "processing_time_seconds": analysis.processing_time_seconds,
         "completed_at": analysis.completed_at,

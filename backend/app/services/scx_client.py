@@ -1,6 +1,6 @@
 """SCX.ai API client using OpenAI SDK."""
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, AsyncIterator
 import logging
 
 from openai import AsyncOpenAI
@@ -101,6 +101,52 @@ class SCXClient:
         """Create embedding for a single text."""
         embeddings = await self.create_embeddings([text])
         return embeddings[0]
+
+    async def chat_completion_stream(
+        self,
+        messages: List[Dict[str, str]],
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        system_prompt: Optional[str] = None,
+    ) -> AsyncIterator[str]:
+        """
+        Generate a streaming chat completion using SCX.ai.
+
+        Args:
+            messages: List of message dictionaries with 'role' and 'content'
+            model: Model to use (defaults to llama-4)
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens in response
+            system_prompt: Optional system prompt to prepend
+
+        Yields:
+            Text chunks as they are generated
+        """
+        model = model or self.default_model
+
+        # Prepend system prompt if provided
+        if system_prompt:
+            messages = [{"role": "system", "content": system_prompt}] + messages
+
+        try:
+            stream = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True,
+            )
+            
+            async for chunk in stream:
+                # Guard against empty choices array
+                if chunk.choices and len(chunk.choices) > 0:
+                    if chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+                    
+        except Exception as e:
+            logger.error(f"SCX.ai streaming error: {e}")
+            raise
 
     async def analyze_with_context(
         self,

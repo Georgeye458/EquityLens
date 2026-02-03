@@ -56,6 +56,7 @@ class Document(Base):
     # Relationships
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
     analyses = relationship("Analysis", back_populates="document", cascade="all, delete-orphan")
+    reports = relationship("Report", back_populates="document", cascade="all, delete-orphan")
 
 
 class DocumentChunk(Base):

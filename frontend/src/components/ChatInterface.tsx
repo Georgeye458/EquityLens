@@ -1,13 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  PaperAirplaneIcon,
-  DocumentTextIcon,
-  UserCircleIcon,
-  SparklesIcon,
-} from '@heroicons/react/24/outline';
+  SendHorizontal,
+  FileText,
+  UserCircle,
+  Sparkles,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage, CitationDetail } from '../types';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Card } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
@@ -34,6 +39,15 @@ export default function ChatInterface({
     scrollToBottom();
   }, [messages]);
 
+  // Auto-expand textarea as user types
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    }
+  }, [input]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -52,7 +66,7 @@ export default function ChatInterface({
 
   const renderCitation = (citation: CitationDetail) => (
     <span className="citation" title={citation.text}>
-      <DocumentTextIcon className="w-3 h-3 mr-1" />
+      <FileText className="w-3 h-3 mr-1" />
       {citation.document_name ? `${citation.document_name} - ` : ''}p.{citation.page_number}
     </span>
   );
@@ -66,158 +80,162 @@ export default function ChatInterface({
   ];
 
   return (
-    <div className="flex flex-col h-[700px] card overflow-hidden">
+    <Card className="flex flex-col h-[700px] overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+      <div className="px-4 py-3 bg-muted/50 border-b">
         <div className="flex items-center">
-          <SparklesIcon className="w-5 h-5 text-primary-500 mr-2" />
-          <h3 className="text-sm font-medium text-gray-900">
+          <Sparkles className="w-5 h-5 text-foreground mr-2" />
+          <h3 className="text-sm font-medium text-foreground">
             Chat with Document
           </h3>
           {documentName && (
-            <span className="ml-2 text-xs text-gray-500">• {documentName}</span>
+            <span className="ml-2 text-xs text-muted-foreground">• {documentName}</span>
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           Ask questions about the full document content, not just extracted POIs
         </p>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.length === 0 ? (
-          <div className="text-center py-8">
-            <SparklesIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <h4 className="text-sm font-medium text-gray-900 mb-2">
-              Start a conversation
-            </h4>
-            <p className="text-xs text-gray-500 mb-4">
-              Ask anything about this earnings report. I have access to the full document.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {suggestedQuestions.slice(0, 3).map((question, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setInput(question)}
-                  className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
-                >
-                  {question}
-                </button>
-              ))}
+      <ScrollArea className="flex-1 px-4 py-4 overflow-hidden">
+        <div className="space-y-4 overflow-hidden">
+          {messages.length === 0 ? (
+            <div className="text-center py-8">
+              <Sparkles className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+              <h4 className="text-sm font-medium text-foreground mb-2">
+                Start a conversation
+              </h4>
+              <p className="text-xs text-muted-foreground mb-4">
+                Ask anything about this earnings report. I have access to the full document.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {suggestedQuestions.slice(0, 3).map((question, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setInput(question)}
+                    className="text-xs px-3 py-1.5 bg-secondary text-secondary-foreground rounded-full hover:bg-accent transition-colors"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`chat-message flex ${
-                message.role === 'user' ? 'justify-end' : 'justify-start'
-              }`}
-            >
+          ) : (
+            messages.map((message) => (
               <div
-                className={`flex ${
-                  message.role === 'user' ? 'max-w-[80%] flex-row-reverse' : 'max-w-[95%] flex-row'
-                }`}
+                key={message.id}
+                className={cn(
+                  "chat-message flex w-full",
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                )}
               >
-                {/* Avatar */}
                 <div
-                  className={`flex-shrink-0 ${
-                    message.role === 'user' ? 'ml-3' : 'mr-3'
-                  }`}
-                >
-                  {message.role === 'user' ? (
-                    <UserCircleIcon className="w-8 h-8 text-gray-400" />
-                  ) : (
-                    <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent-500 rounded-full flex items-center justify-center">
-                      <SparklesIcon className="w-5 h-5 text-white" />
-                    </div>
+                  className={cn(
+                    "flex",
+                    message.role === 'user' ? 'max-w-[75%] flex-row-reverse' : 'max-w-[80%] flex-row'
                   )}
-                </div>
-
-                {/* Message content */}
-                <div
-                  className={`rounded-2xl px-4 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-50 text-gray-900 shadow-sm border border-gray-200'
-                  }`}
                 >
-                  {message.role === 'user' ? (
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  ) : (
-                    <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-headings:font-semibold prose-h3:text-base prose-h4:text-sm prose-table:text-xs prose-th:bg-gray-100 prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-th:border prose-th:border-gray-300 prose-td:px-3 prose-td:py-2 prose-td:border prose-td:border-gray-200 prose-table:border-collapse prose-table:w-full prose-table:overflow-x-auto">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {message.content}
-                      </ReactMarkdown>
-                    </div>
-                  )}
-
-                  {/* Citations */}
-                  {message.citations && message.citations.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <p className="text-xs text-gray-500 mb-1">Sources:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {message.citations.map((citation, idx) => (
-                          <span key={idx}>{renderCitation(citation)}</span>
-                        ))}
+                  {/* Avatar */}
+                  <div
+                    className={cn(
+                      "flex-shrink-0",
+                      message.role === 'user' ? 'ml-2' : 'mr-2'
+                    )}
+                  >
+                    {message.role === 'user' ? (
+                      <UserCircle className="w-7 h-7 text-muted-foreground" />
+                    ) : (
+                      <div className="w-7 h-7 bg-gradient-to-br from-neutral-700 to-neutral-900 rounded-full flex items-center justify-center">
+                        <Sparkles className="w-4 h-4 text-white" />
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+
+                  {/* Message content */}
+                  <div
+                    className={cn(
+                      "rounded-2xl px-4 py-3 overflow-hidden",
+                      message.role === 'user'
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-foreground shadow-sm border"
+                    )}
+                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                  >
+                    {message.role === 'user' ? (
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    ) : (
+                      <div className="prose prose-sm max-w-none overflow-x-auto prose-headings:text-foreground prose-headings:font-semibold prose-h3:text-base prose-h4:text-sm prose-table:text-xs prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-th:border prose-th:border-border prose-td:px-3 prose-td:py-2 prose-td:border prose-td:border-border prose-table:border-collapse [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:block [&_pre]:overflow-x-auto [&_code]:break-all">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+
+                    {/* Citations */}
+                    {message.citations && message.citations.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground mb-1">Sources:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {message.citations.map((citation, idx) => (
+                            <span key={idx}>{renderCitation(citation)}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* Loading indicator */}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-neutral-700 to-neutral-900 rounded-full flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <div className="bg-muted rounded-2xl px-4 py-3">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                  </div>
                 </div>
               </div>
             </div>
-          ))
-        )}
+          )}
 
-        {/* Loading indicator */}
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent-500 rounded-full flex items-center justify-center">
-                <SparklesIcon className="w-5 h-5 text-white" />
-              </div>
-              <div className="bg-gray-100 rounded-2xl px-4 py-3">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200 bg-white">
+      <form onSubmit={handleSubmit} className="p-4 border-t bg-card">
         <div className="flex items-end space-x-3">
           <div className="flex-1">
-            <textarea
+            <Textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask a question about the document..."
-              className="input resize-none"
+              className="resize-none overflow-hidden"
+              style={{ minHeight: '42px', maxHeight: '120px' }}
               rows={1}
               disabled={isLoading}
-              style={{
-                minHeight: '42px',
-                maxHeight: '120px',
-              }}
             />
           </div>
-          <button
+          <Button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="btn-primary px-4 py-2.5"
+            size="icon"
           >
-            <PaperAirplaneIcon className="w-5 h-5" />
-          </button>
+            <SendHorizontal className="w-5 h-5" />
+          </Button>
         </div>
       </form>
-    </div>
+    </Card>
   );
 }
