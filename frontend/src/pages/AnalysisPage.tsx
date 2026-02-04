@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { CitationDetail } from '../types';
+import type { Citation } from '../types';
 
 export default function AnalysisPage() {
   const { id } = useParams<{ id: string }>();
@@ -43,7 +43,7 @@ export default function AnalysisPage() {
   const [selectedModel, setSelectedModel] = useState('llama-4');
   
   // Handle citation click - open PDF viewer at cited page
-  const handleCitationClick = (citation: CitationDetail) => {
+  const handleCitationClick = (citation: Citation) => {
     if (id) {
       openPDFViewer(parseInt(id), citation.page_number);
     }

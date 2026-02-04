@@ -113,7 +113,7 @@ export default function ChatInterface({
     if (!onCitationClick) return content;
     
     // Replace [Page X] or [DOC - Page X] with markdown links using a hash-based protocol
-    const processed = content.replace(CITATION_REGEX, (fullMatch, citationText) => {
+    const processed = content.replace(CITATION_REGEX, (_fullMatch, citationText) => {
       // Encode the citation text for use in URL
       const encoded = encodeURIComponent(citationText);
       // Use #cite: instead of citation: to avoid sanitization
