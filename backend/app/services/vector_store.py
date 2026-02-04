@@ -236,7 +236,7 @@ class VectorStore:
         top_k: int = 5,
     ) -> List[Tuple[DocumentChunk, float]]:
         """
-        Search across multiple documents (optimized with vectorized ops).
+        Search across multiple documents (optimized with vectorized ops and parallel loading).
 
         Args:
             db: Database session
@@ -247,29 +247,59 @@ class VectorStore:
         Returns:
             List of (chunk, similarity_score) tuples
         """
+        import asyncio
+        
         # Get query embedding
         query_embedding = await scx_client.create_embedding(query)
 
-        # Get chunks from cache or DB for each document
-        all_chunks = []
-        all_embeddings = []
+        # Separate cached and uncached documents
+        cached_docs = []
+        uncached_docs = []
         
         for doc_id in document_ids:
             if doc_id in self._embedding_cache:
-                chunks, embeddings = self._embedding_cache[doc_id]
-                all_chunks.extend(chunks)
-                all_embeddings.append(embeddings)
+                cached_docs.append(doc_id)
             else:
-                # Load from DB
-                result = await db.execute(
-                    select(DocumentChunk)
-                    .where(DocumentChunk.document_id == doc_id)
-                    .where(DocumentChunk.embedding.isnot(None))
-                )
-                chunks = result.scalars().all()
-                if chunks:
-                    embeddings = np.array([chunk.embedding for chunk in chunks])
-                    self._embedding_cache[doc_id] = (chunks, embeddings)
+                uncached_docs.append(doc_id)
+        
+        # Load all uncached documents in parallel
+        async def load_document_chunks(doc_id: int):
+            result = await db.execute(
+                select(DocumentChunk)
+                .where(DocumentChunk.document_id == doc_id)
+                .where(DocumentChunk.embedding.isnot(None))
+            )
+            chunks = result.scalars().all()
+            if chunks:
+                embeddings = np.array([chunk.embedding for chunk in chunks])
+                self._embedding_cache[doc_id] = (chunks, embeddings)
+                return chunks, embeddings
+            return [], None
+        
+        # Load uncached documents in parallel
+        if uncached_docs:
+            loaded_results = await asyncio.gather(
+                *[load_document_chunks(doc_id) for doc_id in uncached_docs],
+                return_exceptions=True
+            )
+        else:
+            loaded_results = []
+        
+        # Collect all chunks and embeddings
+        all_chunks = []
+        all_embeddings = []
+        
+        # Add cached documents
+        for doc_id in cached_docs:
+            chunks, embeddings = self._embedding_cache[doc_id]
+            all_chunks.extend(chunks)
+            all_embeddings.append(embeddings)
+        
+        # Add newly loaded documents (filter out errors)
+        for result in loaded_results:
+            if isinstance(result, tuple) and not isinstance(result, Exception):
+                chunks, embeddings = result
+                if chunks and embeddings is not None:
                     all_chunks.extend(chunks)
                     all_embeddings.append(embeddings)
         

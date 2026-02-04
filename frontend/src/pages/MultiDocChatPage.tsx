@@ -8,6 +8,7 @@ import {
 import { useDocuments } from '../context/DocumentContext';
 import { usePDFViewer } from '../context/PDFViewerContext';
 import { useChat } from '../hooks/useChat';
+import { chatApi } from '../lib/api';
 import ChatInterface from '../components/ChatInterface';
 import PDFViewerPanel from '../components/PDFViewerPanel';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -65,6 +66,13 @@ export default function MultiDocChatPage() {
   const handleCitationClick = (citation: CitationDetail) => {
     if (citation.document_id) {
       openPDFViewer(citation.document_id, citation.page_number);
+    } else {
+      // Fallback: if only one document, use it
+      if (selectedDocs.length === 1) {
+        openPDFViewer(selectedDocs[0].id, citation.page_number);
+      } else {
+        console.warn('[Citation] Multiple documents but no document_id match. Cannot determine which PDF to open.');
+      }
     }
   };
 
@@ -85,6 +93,17 @@ export default function MultiDocChatPage() {
       fetchDocuments();
     }
   }, [documents.length, fetchDocuments]);
+
+  // Preload embeddings cache for all selected documents in parallel for faster queries
+  useEffect(() => {
+    if (selectedDocs.length > 0) {
+      Promise.all(
+        selectedDocs.map(doc => chatApi.preloadCache(doc.id))
+      ).catch(err => {
+        console.warn('Failed to preload some document caches:', err);
+      });
+    }
+  }, [selectedDocs]);
 
   useEffect(() => {
     if (!isInitialized && documentIds.length > 0 && selectedDocs.length === documentIds.length) {
@@ -195,6 +214,7 @@ export default function MultiDocChatPage() {
           onSendMessage={handleSendMessage}
           isLoading={isSending}
           documentName={documentNames}
+          documents={selectedDocs}
           onCitationClick={handleCitationClick}
         />
       )}

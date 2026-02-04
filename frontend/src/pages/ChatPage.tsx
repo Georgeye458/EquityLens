@@ -45,7 +45,10 @@ export default function ChatPage() {
   // Handle citation click - open PDF viewer overlay at the cited page
   const handleCitationClick = (citation: CitationDetail) => {
     if (id) {
-      openPDFViewer(parseInt(id), citation.page_number);
+      const docId = parseInt(id);
+      openPDFViewer(docId, citation.page_number);
+    } else {
+      console.warn('[Citation] No document ID available');
     }
   };
 
@@ -160,6 +163,7 @@ export default function ChatPage() {
           onSendMessage={handleSendMessage}
           isLoading={isSending}
           documentName={selectedDocument.company_name}
+          documents={[selectedDocument]}
           onCitationClick={handleCitationClick}
         />
       )}

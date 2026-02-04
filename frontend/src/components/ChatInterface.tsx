@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ChatMessage, CitationDetail } from '../types';
+import type { ChatMessage, CitationDetail, Document } from '../types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
@@ -19,31 +19,120 @@ interface ChatInterfaceProps {
   onSendMessage: (content: string) => Promise<void>;
   isLoading?: boolean;
   documentName?: string;
+  documents?: Document[];  // Array of documents for matching citations
   onCitationClick?: (citation: CitationDetail) => void;
 }
 
 // Regex to match citation patterns like [Page 15], [Pages 10-12], [WBC - Page 15], [Document Name - p. 5]
 const CITATION_REGEX = /\[([^\]]*?(?:page|pages|p\.)\s*\d+(?:\s*[-–]\s*\d+)?)\]/gi;
 
-// Parse a citation string to extract document name and page number
-function parseCitationString(citationText: string): { documentName: string | null; pageNumber: number; pageEnd?: number } | null {
+// Parse a citation string to extract document name and page number, with document ID matching
+function parseCitationString(
+  citationText: string, 
+  documents?: Document[]
+): { documentName: string | null; pageNumber: number; pageEnd?: number; documentId?: number } | null {
   // Match patterns like "WBC - Page 15", "Page 15", "p. 15", "Pages 10-12"
   const withDocMatch = citationText.match(/^(.+?)\s*[-–]\s*(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);
   if (withDocMatch) {
+    const docName = withDocMatch[1].trim();
+    const pageNumber = parseInt(withDocMatch[2], 10);
+    const pageEnd = withDocMatch[3] ? parseInt(withDocMatch[3], 10) : undefined;
+    
+    // Try to match document name to actual document
+    let documentId: number | undefined;
+    if (documents && documents.length > 0) {
+      let docNameLower = docName.trim().toLowerCase();
+      
+      // Check if name is truncated (ends with ...)
+      const isTruncated = docNameLower.endsWith('...');
+      if (isTruncated) {
+        // Remove the ... for matching
+        docNameLower = docNameLower.slice(0, -3).trim();
+      }
+      
+      // Try to match by ticker first (most common and specific)
+      let matchedDoc = documents.find(doc => {
+        const ticker = doc.company_ticker?.trim().toLowerCase();
+        return ticker && ticker === docNameLower;
+      });
+      
+      // If no ticker match, try company name (exact match first, then partial)
+      if (!matchedDoc) {
+        matchedDoc = documents.find(doc => {
+          const companyName = doc.company_name?.trim().toLowerCase();
+          if (!companyName) return false;
+          
+          if (isTruncated) {
+            // For truncated names, use "starts with" matching
+            return companyName.startsWith(docNameLower);
+          } else {
+            return companyName === docNameLower;
+          }
+        });
+      }
+      
+      // Try partial match on company name
+      if (!matchedDoc) {
+        matchedDoc = documents.find(doc => {
+          const companyName = doc.company_name?.trim().toLowerCase();
+          return companyName && (
+            companyName.includes(docNameLower) || 
+            docNameLower.includes(companyName)
+          );
+        });
+      }
+      
+      // Try matching by filename (cleaned up)
+      if (!matchedDoc) {
+        matchedDoc = documents.find(doc => {
+          if (doc.filename) {
+            const cleanFilename = doc.filename
+              .replace(/\.pdf$/i, '')
+              .replace(/^\d+\.\d+_/, '')
+              .replace(/[_-]+/g, ' ')
+              .trim()
+              .toLowerCase();
+            
+            if (isTruncated) {
+              // For truncated names, check if filename starts with the truncated name
+              return cleanFilename.startsWith(docNameLower);
+            } else {
+              return cleanFilename.includes(docNameLower) || docNameLower.includes(cleanFilename);
+            }
+          }
+          return false;
+        });
+      }
+      
+      documentId = matchedDoc?.id;
+      
+      if (!matchedDoc) {
+        console.warn('[Citation] Could not match document name:', docName, 'against available documents');
+      }
+    }
+    
     return {
-      documentName: withDocMatch[1].trim(),
-      pageNumber: parseInt(withDocMatch[2], 10),
-      pageEnd: withDocMatch[3] ? parseInt(withDocMatch[3], 10) : undefined,
+      documentName: docName,
+      pageNumber,
+      pageEnd,
+      documentId,
     };
   }
   
-  // Match patterns like "Page 15", "p. 15", "Pages 10-12"
+  // Match patterns like "Page 15", "p. 15", "Pages 10-12" (no document name)
   const pageOnlyMatch = citationText.match(/^(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);
   if (pageOnlyMatch) {
+    const pageNumber = parseInt(pageOnlyMatch[1], 10);
+    const pageEnd = pageOnlyMatch[2] ? parseInt(pageOnlyMatch[2], 10) : undefined;
+    
+    // If only one document, use it
+    const documentId = documents && documents.length === 1 ? documents[0].id : undefined;
+    
     return {
       documentName: null,
-      pageNumber: parseInt(pageOnlyMatch[1], 10),
-      pageEnd: pageOnlyMatch[2] ? parseInt(pageOnlyMatch[2], 10) : undefined,
+      pageNumber,
+      pageEnd,
+      documentId,
     };
   }
   
@@ -55,6 +144,7 @@ export default function ChatInterface({
   onSendMessage,
   isLoading,
   documentName,
+  documents,
   onCitationClick,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
@@ -98,22 +188,26 @@ export default function ChatInterface({
   const handleInlineCitationClick = useCallback((citationText: string) => {
     if (!onCitationClick) return;
     
-    const parsed = parseCitationString(citationText);
+    const parsed = parseCitationString(citationText, documents);
+    
     if (parsed) {
       onCitationClick({
         page_number: parsed.pageNumber,
         document_name: parsed.documentName || undefined,
+        document_id: parsed.documentId,
         text: `Citation: ${citationText}`,
       });
+    } else {
+      console.warn('[Citation] Failed to parse citation:', citationText);
     }
-  }, [onCitationClick]);
+  }, [onCitationClick, documents]);
 
   // Pre-process content to convert citations to special markdown links
   const preprocessContent = useCallback((content: string): string => {
     if (!onCitationClick) return content;
     
     // Replace [Page X] or [DOC - Page X] with markdown links using a hash-based protocol
-    const processed = content.replace(CITATION_REGEX, (fullMatch, citationText) => {
+    const processed = content.replace(CITATION_REGEX, (_fullMatch, citationText) => {
       // Encode the citation text for use in URL
       const encoded = encodeURIComponent(citationText);
       // Use #cite: instead of citation: to avoid sanitization
@@ -132,7 +226,7 @@ export default function ChatInterface({
       // Check if this is a citation link (using #cite: protocol)
       if (href?.startsWith('#cite:')) {
         const citationText = decodeURIComponent(href.replace('#cite:', ''));
-        const parsed = parseCitationString(citationText);
+        const parsed = parseCitationString(citationText, documents);
         
         return (
           <span
@@ -172,7 +266,7 @@ export default function ChatInterface({
         </a>
       );
     },
-  }), [handleInlineCitationClick]);
+  }), [handleInlineCitationClick, documents]);
 
   // Render content with clickable inline citations
   const renderContentWithCitations = useCallback((content: string) => {

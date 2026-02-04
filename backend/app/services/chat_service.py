@@ -348,15 +348,12 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
         import time
         start_time = time.time()
         
-        # Get session
-        session_start = time.time()
+        # Get session first (faster query with indexes now)
         session = await self.get_session(db, session_id)
         if not session:
             raise ValueError(f"Session {session_id} not found")
-        logger.info(f"Chat stream: get_session took {time.time() - session_start:.3f}s")
 
-        # Save user message (no need to wait for commit)
-        msg_start = time.time()
+        # Save user message
         user_msg = ChatMessage(
             session_id=session_id,
             role="user",
@@ -364,11 +361,12 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
         )
         db.add(user_msg)
         await db.commit()
-        logger.info(f"Chat stream: save message took {time.time() - msg_start:.3f}s")
+        await db.refresh(user_msg)
+        
+        logger.info(f"Chat stream: session setup took {time.time() - start_time:.3f}s")
 
         # Get document IDs from session
         document_ids = session.get_document_ids()
-        logger.info(f"Chat stream: session setup took {time.time() - start_time:.3f}s")
         
         if not document_ids:
             raise ValueError("No documents associated with this session")
@@ -528,7 +526,14 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
             retrieved_chunks=[{"document_id": c["document_id"], "page": c["page_number"]} for c in citations],
         )
         db.add(assistant_msg)
-        await db.commit()
+        
+        # Commit both user and assistant messages together
+        try:
+            await db.commit()
+        except Exception as commit_error:
+            logger.error(f"Failed to commit chat messages: {commit_error}")
+            await db.rollback()
+            raise
 
     def _extract_citations_from_response(
         self,

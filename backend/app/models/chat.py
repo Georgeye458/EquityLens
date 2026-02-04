@@ -26,13 +26,13 @@ class ChatSession(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     # Legacy single document field (kept for backward compatibility)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True, index=True)
     # New: Support multiple documents as JSON array
     document_ids = Column(JSON, nullable=True)  # List of document IDs
     
     title = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Index for sorting by time
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
 
     # Relationships
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
@@ -51,7 +51,7 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=False)
+    session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=False, index=True)
     
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
@@ -61,7 +61,7 @@ class ChatMessage(Base):
     retrieved_chunks = Column(JSON, nullable=True)
     
     tokens_used = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Index for sorting
 
     # Relationships
     session = relationship("ChatSession", back_populates="messages")
