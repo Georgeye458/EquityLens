@@ -70,7 +70,7 @@ function parseCitationString(text: string): CitationDetail | null {
     return {
       document_name: match[1],
       page_number: parseInt(match[2], 10),
-      bbox: undefined,
+      text: text,
       document_id: undefined,
     };
   }
@@ -86,7 +86,7 @@ export default function ReportViewer({ report, onCitationClick }: ReportViewerPr
   const preprocessContent = useCallback((content: string): string => {
     if (!onCitationClick) return content;
     
-    return content.replace(CITATION_REGEX, (fullMatch, citationText, pageNum) => {
+    return content.replace(CITATION_REGEX, (_fullMatch, citationText, pageNum) => {
       const encoded = encodeURIComponent(citationText + ' - Page ' + pageNum);
       return `[📄 ${citationText} - Page ${pageNum}](#cite:${encoded})`;
     });
