@@ -8,7 +8,6 @@ from datetime import datetime
 from collections import deque
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, DocumentChunk, ProcessingStatus
 from app.services.scx_client import scx_client
@@ -131,8 +130,8 @@ class ProcessingQueue:
                 
                 logger.info(f"Document {document_id}: {page_count} pages to process")
                 
-                # Process with streaming
-                await self._stream_and_embed(db, document_id, file_path, document_processor)
+                # Process with streaming (each batch uses its own session)
+                await self._stream_and_embed(document_id, file_path, document_processor)
                 
                 # Mark as completed
                 document.status = ProcessingStatus.COMPLETED.value
@@ -150,7 +149,6 @@ class ProcessingQueue:
     
     async def _stream_and_embed(
         self,
-        db: AsyncSession,
         document_id: int,
         file_path: str,
         processor,
@@ -160,6 +158,7 @@ class ProcessingQueue:
         
         This processes the PDF page by page, creating chunks and embeddings
         in parallel batches for maximum speed while maintaining memory efficiency.
+        Each embedding batch uses its own database session to avoid concurrency issues.
         """
         chunk_buffer: List[Dict[str, Any]] = []
         chunk_index = 0
@@ -184,8 +183,9 @@ class ProcessingQueue:
                 chunk_buffer = chunk_buffer[EMBEDDING_BATCH_SIZE:]
                 
                 # Create task for parallel processing
+                # Each batch gets its own session to avoid concurrency issues
                 task = asyncio.create_task(
-                    self._embed_and_save_batch(db, document_id, batch)
+                    self._embed_and_save_batch(document_id, batch)
                 )
                 pending_batches.append(task)
                 
@@ -212,7 +212,7 @@ class ProcessingQueue:
         
         # Process remaining chunks in buffer
         if chunk_buffer:
-            await self._embed_and_save_batch(db, document_id, chunk_buffer)
+            await self._embed_and_save_batch(document_id, chunk_buffer)
         
         # Handle final overlap text as last chunk
         if overlap_text.strip():
@@ -222,19 +222,23 @@ class ProcessingQueue:
                 "chunk_index": chunk_index,
                 "metadata": {},
             }]
-            await self._embed_and_save_batch(db, document_id, final_chunk)
+            await self._embed_and_save_batch(document_id, final_chunk)
         
         logger.info(f"Document {document_id}: finished processing {pages_processed} pages")
     
     async def _embed_and_save_batch(
         self,
-        db: AsyncSession,
         document_id: int,
         chunks: List[Dict[str, Any]],
     ):
-        """Generate embeddings for a batch of chunks and save to database."""
+        """Generate embeddings for a batch of chunks and save to database.
+        
+        Each batch gets its own database session to avoid concurrent transaction conflicts.
+        """
         if not chunks:
             return
+        
+        from app.services.database import async_session
         
         try:
             # Extract texts
@@ -243,20 +247,22 @@ class ProcessingQueue:
             # Generate embeddings
             embeddings = await scx_client.create_embeddings(texts)
             
-            # Create database records
-            for chunk, embedding in zip(chunks, embeddings):
-                db_chunk = DocumentChunk(
-                    document_id=document_id,
-                    content=chunk["content"],
-                    page_number=chunk.get("page_number"),
-                    chunk_index=chunk["chunk_index"],
-                    embedding=embedding,
-                    chunk_metadata=chunk.get("metadata"),
-                )
-                db.add(db_chunk)
-            
-            # Commit this batch
-            await db.commit()
+            # Use a dedicated session for this batch to avoid concurrency issues
+            async with async_session() as db:
+                # Create database records
+                for chunk, embedding in zip(chunks, embeddings):
+                    db_chunk = DocumentChunk(
+                        document_id=document_id,
+                        content=chunk["content"],
+                        page_number=chunk.get("page_number"),
+                        chunk_index=chunk["chunk_index"],
+                        embedding=embedding,
+                        chunk_metadata=chunk.get("metadata"),
+                    )
+                    db.add(db_chunk)
+                
+                # Commit this batch
+                await db.commit()
             
             # Clear references
             del texts
@@ -264,7 +270,6 @@ class ProcessingQueue:
             
         except Exception as e:
             logger.error(f"Error embedding batch for document {document_id}: {e}")
-            await db.rollback()
             raise
     
     async def _mark_document_failed(self, document_id: int, error_message: str):
