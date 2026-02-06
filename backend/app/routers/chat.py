@@ -165,6 +165,7 @@ async def send_message_stream(
     Send a message and get streaming AI response.
 
     Returns Server-Sent Events (SSE) for real-time streaming.
+    Sends heartbeats every 10s to prevent Heroku 30s timeout during LLM thinking phase.
     
     Note: Creates its own database session to avoid FastAPI closing the session
     before streaming completes.
@@ -172,18 +173,45 @@ async def send_message_stream(
     async def generate():
         # Create independent DB session for the generator's lifetime
         from app.services.database import async_session
+        import time
+        
+        # Send initial heartbeat immediately to establish connection
+        yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
         
         async with async_session() as db:
             try:
-                async for chunk in chat_service.send_message_stream(
+                # Track last output time for heartbeats
+                last_output_time = time.time()
+                heartbeat_interval = 10  # seconds
+                
+                # Create an async iterator we can manually advance
+                stream_iter = chat_service.send_message_stream(
                     db=db,
                     session_id=session_id,
                     user_message=message.content,
                     model=settings.scx_model,
-                ):
-                    # Send as SSE format
-                    yield f"data: {json.dumps({'type': 'content', 'data': chunk})}\n\n"
-                    await asyncio.sleep(0)  # Allow other tasks to run
+                ).__aiter__()
+                
+                while True:
+                    try:
+                        # Wait for next chunk with timeout
+                        chunk = await asyncio.wait_for(
+                            stream_iter.__anext__(),
+                            timeout=heartbeat_interval
+                        )
+                        # Got content - send it
+                        yield f"data: {json.dumps({'type': 'content', 'data': chunk})}\n\n"
+                        last_output_time = time.time()
+                        
+                    except asyncio.TimeoutError:
+                        # No content in heartbeat_interval seconds - send heartbeat
+                        yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                        # Continue waiting for content
+                        continue
+                        
+                    except StopAsyncIteration:
+                        # Stream finished
+                        break
                 
                 # Send completion signal
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
