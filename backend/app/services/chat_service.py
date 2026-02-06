@@ -538,6 +538,13 @@ Please provide a thorough answer with citations using the exact document labels 
         
         # Clean the full response for storage
         cleaned_response = strip_thinking_tags(full_response)
+        
+        # Handle empty response case (e.g., LLM only generated thinking tags)
+        if not cleaned_response.strip():
+            fallback_message = "I apologize, but I wasn't able to generate a complete response. Please try rephrasing your question or try again."
+            cleaned_response = fallback_message
+            yield fallback_message
+            logger.warning(f"Empty response after stripping think tags. Raw response length: {len(full_response)}")
 
         # Extract citations from cleaned response
         response_citations = self._extract_citations_from_response(cleaned_response, citations)
@@ -568,23 +575,61 @@ Please provide a thorough answer with citations using the exact document labels 
         """Extract page citations mentioned in the response."""
         import re
 
-        # Find all page references in the response
-        page_pattern = r'\[Page[s]?\s*(\d+(?:-\d+)?)\]'
-        matches = re.findall(page_pattern, response)
-
         cited_pages = set()
-        for match in matches:
-            if "-" in match:
-                start, end = match.split("-")
-                cited_pages.update(range(int(start), int(end) + 1))
-            else:
-                cited_pages.add(int(match))
+        cited_doc_pages = []  # List of (doc_id, page) tuples for precise matching
+        
+        # Pattern 1: Full citation format [Document Name {ID:X} - Page Y] or [Doc Name - Page Y]
+        # Captures: document part (optional ID), page number(s)
+        full_citation_pattern = r'\[([^\]]+?)\s*[-–]\s*(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–,]\s*(\d+))?\]'
+        for match in re.finditer(full_citation_pattern, response, re.IGNORECASE):
+            doc_part = match.group(1)
+            page_start = int(match.group(2))
+            page_end = int(match.group(3)) if match.group(3) else page_start
+            
+            # Try to extract document ID from the doc_part
+            id_match = re.search(r'\{ID:(\d+)\}', doc_part)
+            doc_id = int(id_match.group(1)) if id_match else None
+            
+            # Add all pages in range
+            for page in range(page_start, page_end + 1):
+                cited_pages.add(page)
+                if doc_id:
+                    cited_doc_pages.append((doc_id, page))
+        
+        # Pattern 2: Simple format [Page X] or [Pages X-Y]
+        simple_pattern = r'\[Page[s]?\s*(\d+)(?:\s*[-–,]\s*(\d+))?\]'
+        for match in re.finditer(simple_pattern, response, re.IGNORECASE):
+            page_start = int(match.group(1))
+            page_end = int(match.group(2)) if match.group(2) else page_start
+            for page in range(page_start, page_end + 1):
+                cited_pages.add(page)
+        
+        # Pattern 3: Inline page references like "on page 15" or "pages 10-12"
+        inline_pattern = r'(?:on|see|from|at)\s+page[s]?\s+(\d+)(?:\s*[-–,]\s*(\d+))?'
+        for match in re.finditer(inline_pattern, response, re.IGNORECASE):
+            page_start = int(match.group(1))
+            page_end = int(match.group(2)) if match.group(2) else page_start
+            for page in range(page_start, page_end + 1):
+                cited_pages.add(page)
 
-        # Filter available citations to only those referenced
-        relevant_citations = [
-            c for c in available_citations
-            if c["page_number"] in cited_pages
-        ]
+        # Build relevant citations - prefer precise doc+page matching
+        relevant_citations = []
+        seen = set()
+        
+        # First, add citations that match both doc_id and page (most precise)
+        for doc_id, page in cited_doc_pages:
+            for c in available_citations:
+                key = (c["document_id"], c["page_number"])
+                if key not in seen and c["document_id"] == doc_id and c["page_number"] == page:
+                    relevant_citations.append(c)
+                    seen.add(key)
+        
+        # Then add citations that match just the page number (fallback)
+        for c in available_citations:
+            key = (c["document_id"], c["page_number"])
+            if key not in seen and c["page_number"] in cited_pages:
+                relevant_citations.append(c)
+                seen.add(key)
 
         return relevant_citations
 

@@ -109,9 +109,10 @@ class SCXClient:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         system_prompt: Optional[str] = None,
+        max_retries: int = 3,
     ) -> AsyncIterator[str]:
         """
-        Generate a streaming chat completion using SCX.ai.
+        Generate a streaming chat completion using SCX.ai with retry logic.
 
         Args:
             messages: List of message dictionaries with 'role' and 'content'
@@ -119,34 +120,60 @@ class SCXClient:
             temperature: Sampling temperature
             max_tokens: Maximum tokens in response
             system_prompt: Optional system prompt to prepend
+            max_retries: Maximum number of retry attempts
 
         Yields:
             Text chunks as they are generated
         """
+        import asyncio
+        
         model = model or self.default_model
 
         # Prepend system prompt if provided
         if system_prompt:
             messages = [{"role": "system", "content": system_prompt}] + messages
 
-        try:
-            stream = await self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
-            )
-            
-            async for chunk in stream:
-                # Guard against empty choices array
-                if chunk.choices and len(chunk.choices) > 0:
-                    if chunk.choices[0].delta.content:
-                        yield chunk.choices[0].delta.content
-                    
-        except Exception as e:
-            logger.error(f"SCX.ai streaming error: {e}")
-            raise
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                stream = await self.client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=True,
+                )
+                
+                chunk_count = 0
+                async for chunk in stream:
+                    # Guard against empty choices array
+                    if chunk.choices and len(chunk.choices) > 0:
+                        if chunk.choices[0].delta.content:
+                            chunk_count += 1
+                            yield chunk.choices[0].delta.content
+                
+                # If we got here successfully with content, we're done
+                if chunk_count > 0:
+                    return
+                else:
+                    # Empty response - treat as retriable error
+                    logger.warning(f"SCX.ai stream returned no content (attempt {attempt + 1}/{max_retries})")
+                    last_error = Exception("Empty response from LLM")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                        continue
+                        
+            except Exception as e:
+                last_error = e
+                logger.error(f"SCX.ai streaming error (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                    continue
+                raise
+        
+        # If we exhausted retries, raise the last error
+        if last_error:
+            raise last_error
 
     async def analyze_with_context(
         self,
