@@ -66,33 +66,9 @@ function parseCitationString(
         return ticker && ticker === docNameLower;
       });
       
-      // If no ticker match, try company name (exact match first, then partial)
-      if (!matchedDoc) {
-        matchedDoc = documents.find(doc => {
-          const companyName = doc.company_name?.trim().toLowerCase();
-          if (!companyName) return false;
-          
-          if (isTruncated) {
-            // For truncated names, use "starts with" matching
-            return companyName.startsWith(docNameLower);
-          } else {
-            return companyName === docNameLower;
-          }
-        });
-      }
-      
-      // Try partial match on company name
-      if (!matchedDoc) {
-        matchedDoc = documents.find(doc => {
-          const companyName = doc.company_name?.trim().toLowerCase();
-          return companyName && (
-            companyName.includes(docNameLower) || 
-            docNameLower.includes(companyName)
-          );
-        });
-      }
-      
-      // Try matching by filename (cleaned up)
+      // PRIORITY: Try matching by filename FIRST (more specific than company name)
+      // This prevents matching "wbc full year presentation" to wrong document
+      // when multiple documents have the same company name
       if (!matchedDoc) {
         matchedDoc = documents.find(doc => {
           if (doc.filename) {
@@ -107,10 +83,37 @@ function parseCitationString(
               // For truncated names, check if filename starts with the truncated name
               return cleanFilename.startsWith(docNameLower);
             } else {
+              // Check both directions for partial matching
               return cleanFilename.includes(docNameLower) || docNameLower.includes(cleanFilename);
             }
           }
           return false;
+        });
+      }
+      
+      // If no filename match, try company name (exact match)
+      if (!matchedDoc) {
+        matchedDoc = documents.find(doc => {
+          const companyName = doc.company_name?.trim().toLowerCase();
+          if (!companyName) return false;
+          
+          if (isTruncated) {
+            return companyName.startsWith(docNameLower);
+          } else {
+            return companyName === docNameLower;
+          }
+        });
+      }
+      
+      // Last resort: Try partial match on company name
+      // (only if we have a single document or this is a very specific query)
+      if (!matchedDoc && documents.length === 1) {
+        matchedDoc = documents.find(doc => {
+          const companyName = doc.company_name?.trim().toLowerCase();
+          return companyName && (
+            companyName.includes(docNameLower) || 
+            docNameLower.includes(companyName)
+          );
         });
       }
       
