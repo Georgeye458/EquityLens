@@ -262,8 +262,12 @@ export default function ChatInterface({
   const preprocessContent = useCallback((content: string): string => {
     if (!onCitationClick) return content;
     
+    // FIRST: Strip standalone [ID:X] or [ID:X-P8] patterns that LLM generates outside of citations
+    // These don't match CITATION_REGEX (which requires "page/pages/p.") so they'd render as plain text
+    let processed = content.replace(/\[ID:\d+(?:-P?\d+)?\]/gi, '');
+    
     // Replace [Page X] or [DOC - Page X] with markdown links using a hash-based protocol
-    const processed = content.replace(CITATION_REGEX, (_fullMatch, citationText) => {
+    processed = processed.replace(CITATION_REGEX, (_fullMatch, citationText) => {
       // Check if this is a multi-citation (contains semicolons separating multiple citations)
       if (citationText.includes(';')) {
         // Split into individual citations and create separate links
