@@ -24,15 +24,25 @@ interface ChatInterfaceProps {
 }
 
 // Regex to match citation patterns like [Page 15], [Pages 10-12], [WBC - Page 15], [Document Name - p. 5]
-const CITATION_REGEX = /\[([^\]]*?(?:page|pages|p\.)\s*\d+(?:\s*[-–]\s*\d+)?)\]/gi;
+// Also matches multi-citations like [Doc1 - Page 1; Doc2 - Page 2]
+const CITATION_REGEX = /\[([^\]]*?(?:page|pages|p\.)\s*\d+(?:\s*[-–]\s*\d+)?(?:\s*;[^\]]*?(?:page|pages|p\.)\s*\d+(?:\s*[-–]\s*\d+)?)*)\]/gi;
+
+// Single citation pattern (used for parsing individual citations)
+const SINGLE_CITATION_PATTERN = /^(.+?)\s*[-–]\s*(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i;
 
 // Parse a citation string to extract document name and page number, with document ID matching
 function parseCitationString(
   citationText: string, 
   documents?: Document[]
 ): { documentName: string | null; pageNumber: number; pageEnd?: number; documentId?: number } | null {
+  // Safety: If citation contains semicolons (multi-citation), parse just the first one
+  let cleanCitation = citationText;
+  if (citationText.includes(';')) {
+    cleanCitation = citationText.split(';')[0].trim();
+  }
+  
   // Match patterns like "WBC - Page 15", "Page 15", "p. 15", "Pages 10-12"
-  const withDocMatch = citationText.match(/^(.+?)\s*[-–]\s*(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);
+  const withDocMatch = cleanCitation.match(SINGLE_CITATION_PATTERN);
   if (withDocMatch) {
     const docName = withDocMatch[1].trim();
     const pageNumber = parseInt(withDocMatch[2], 10);
@@ -120,7 +130,7 @@ function parseCitationString(
   }
   
   // Match patterns like "Page 15", "p. 15", "Pages 10-12" (no document name)
-  const pageOnlyMatch = citationText.match(/^(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);
+  const pageOnlyMatch = cleanCitation.match(/^(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);
   if (pageOnlyMatch) {
     const pageNumber = parseInt(pageOnlyMatch[1], 10);
     const pageEnd = pageOnlyMatch[2] ? parseInt(pageOnlyMatch[2], 10) : undefined;
@@ -208,7 +218,17 @@ export default function ChatInterface({
     
     // Replace [Page X] or [DOC - Page X] with markdown links using a hash-based protocol
     const processed = content.replace(CITATION_REGEX, (_fullMatch, citationText) => {
-      // Encode the citation text for use in URL
+      // Check if this is a multi-citation (contains semicolons separating multiple citations)
+      if (citationText.includes(';')) {
+        // Split into individual citations and create separate links
+        const citations = citationText.split(';').map((c: string) => c.trim()).filter(Boolean);
+        return citations.map((singleCitation: string) => {
+          const encoded = encodeURIComponent(singleCitation);
+          return `[📄 ${singleCitation}](#cite:${encoded})`;
+        }).join(' ');
+      }
+      
+      // Single citation - encode and create link
       const encoded = encodeURIComponent(citationText);
       // Use #cite: instead of citation: to avoid sanitization
       return `[📄 ${citationText}](#cite:${encoded})`;
