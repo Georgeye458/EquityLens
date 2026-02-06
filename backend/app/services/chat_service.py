@@ -311,7 +311,7 @@ class ChatService:
 
 Question: {user_message}
 
-Please provide a thorough answer with citations using the exact document labels from the context headers (including {ID:X} if present).""",
+Please provide a thorough answer with citations using the exact document labels from the context headers (including {{ID:X}} if present).""",
         })
 
         # Generate response
@@ -477,7 +477,7 @@ Please provide a thorough answer with citations using the exact document labels 
 
 Question: {user_message}
 
-Please provide a thorough answer with citations using the exact document labels from the context headers (including {ID:X} if present).""",
+Please provide a thorough answer with citations using the exact document labels from the context headers (including {{ID:X}} if present).""",
         })
         
         logger.info(f"Chat stream: total prep took {time.time() - start_time:.3f}s, starting LLM stream...")
