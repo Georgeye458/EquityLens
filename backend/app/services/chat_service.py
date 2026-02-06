@@ -21,7 +21,7 @@ CRITICAL: You have access to the FULL source documents through the provided cont
 
 Guidelines:
 1. Answer questions thoroughly using information from the provided document chunks
-2. ALWAYS cite your sources using the EXACT format from the context headers (including the [ID:X] tag if present)
+2. ALWAYS cite your sources using the EXACT format from the context headers (including the {ID:X} tag if present)
 3. When comparing across documents, clearly indicate which document each piece of information comes from
 4. If information is found in multiple places, cite all relevant sources
 5. If you're uncertain about something, say so rather than guessing
@@ -30,9 +30,9 @@ Guidelines:
 8. If the question cannot be answered from the provided context, say so clearly
 
 IMPORTANT: When citing, use the exact document label from the context including the ID tag:
-- Use [Document Name [ID:X] - Page Y] format exactly as shown in context headers
+- Use [Document Name {ID:X} - Page Y] format exactly as shown in context headers
 - This ensures accurate document linking for users
-- Example: [WBC Full Year Results [ID:42] - Page 15]
+- Example: [WBC Full Year Results {ID:42} - Page 15]
 
 Remember: Users trust you for accurate, well-cited analysis. Quality and traceability are paramount."""
 
@@ -63,7 +63,7 @@ def get_document_label(doc: Document, include_id: bool = False) -> str:
             name = name[:27] + '...'
         
         if include_id:
-            return f"{name} [ID:{doc.id}]"
+            return f"{name} {{ID:{doc.id}}}"
         return name
     
     # Fallback: construct from metadata
@@ -93,7 +93,7 @@ def get_document_label(doc: Document, include_id: bool = False) -> str:
     label = ' '.join(parts) if parts else 'Document'
     
     if include_id:
-        return f"{label} [ID:{doc.id}]"
+        return f"{label} {{ID:{doc.id}}}"
     return label
 
 
@@ -263,7 +263,7 @@ class ChatService:
             doc = doc_info.get(chunk.document_id)
             # Include ID in label for multi-document scenarios to enable reliable frontend matching
             include_id = len(document_ids) > 1
-            doc_label = get_document_label(doc, include_id=include_id) if doc else f"Doc [ID:{chunk.document_id}]"
+            doc_label = get_document_label(doc, include_id=include_id) if doc else f"Doc {{ID:{chunk.document_id}}}"
             # Store clean label without ID for display
             doc_label_display = get_document_label(doc, include_id=False) if doc else f"Doc {chunk.document_id}"
             
@@ -311,7 +311,7 @@ class ChatService:
 
 Question: {user_message}
 
-Please provide a thorough answer with citations using the exact document labels from the context headers (including [ID:X] if present).""",
+Please provide a thorough answer with citations using the exact document labels from the context headers (including {ID:X} if present).""",
         })
 
         # Generate response
@@ -420,7 +420,7 @@ Please provide a thorough answer with citations using the exact document labels 
             doc = doc_info.get(chunk.document_id)
             # Include ID in label for multi-document scenarios to enable reliable frontend matching
             include_id = len(document_ids) > 1
-            doc_label = get_document_label(doc, include_id=include_id) if doc else f"Doc [ID:{chunk.document_id}]"
+            doc_label = get_document_label(doc, include_id=include_id) if doc else f"Doc {{ID:{chunk.document_id}}}"
             # Store clean label without ID for display
             doc_label_display = get_document_label(doc, include_id=False) if doc else f"Doc {chunk.document_id}"
             
@@ -477,7 +477,7 @@ Please provide a thorough answer with citations using the exact document labels 
 
 Question: {user_message}
 
-Please provide a thorough answer with citations using the exact document labels from the context headers (including [ID:X] if present).""",
+Please provide a thorough answer with citations using the exact document labels from the context headers (including {ID:X} if present).""",
         })
         
         logger.info(f"Chat stream: total prep took {time.time() - start_time:.3f}s, starting LLM stream...")

@@ -25,15 +25,15 @@ interface ChatInterfaceProps {
 
 // Regex to match citation patterns like [Page 15], [Pages 10-12], [WBC - Page 15], [Document Name - p. 5]
 // Also matches multi-citations like [Doc1 - Page 1; Doc2 - Page 2]
-// Updated to also match citations with embedded IDs like [WBC [ID:42] - Page 15]
+// Updated to also match citations with embedded IDs like [WBC {ID:42} - Page 15]
 const CITATION_REGEX = /\[([^\]]*?(?:page|pages|p\.)\s*\d+(?:\s*[-–]\s*\d+)?(?:\s*;[^\]]*?(?:page|pages|p\.)\s*\d+(?:\s*[-–]\s*\d+)?)*)\]/gi;
 
 // Single citation pattern (used for parsing individual citations)
-// Updated to capture optional [ID:X] in document name
+// Updated to capture optional {ID:X} in document name
 const SINGLE_CITATION_PATTERN = /^(.+?)\s*[-–]\s*(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i;
 
-// Pattern to extract document ID from label like "WBC Full Year [ID:42]"
-const DOCUMENT_ID_PATTERN = /\[ID:(\d+)\]/i;
+// Pattern to extract document ID from label like "WBC Full Year {ID:42}"
+const DOCUMENT_ID_PATTERN = /\{ID:(\d+)\}/i;
 
 // Parse a citation string to extract document name and page number, with document ID matching
 function parseCitationString(
@@ -53,7 +53,7 @@ function parseCitationString(
     const pageNumber = parseInt(withDocMatch[2], 10);
     const pageEnd = withDocMatch[3] ? parseInt(withDocMatch[3], 10) : undefined;
     
-    // PRIORITY 1: Check for embedded document ID in the citation text [ID:X]
+    // PRIORITY 1: Check for embedded document ID in the citation text {ID:X}
     // This is the most reliable method - the backend embeds the actual ID
     const idMatch = docName.match(DOCUMENT_ID_PATTERN);
     if (idMatch) {
@@ -247,7 +247,7 @@ export default function ChatInterface({
         const citations = citationText.split(';').map((c: string) => c.trim()).filter(Boolean);
         return citations.map((singleCitation: string) => {
           const encoded = encodeURIComponent(singleCitation);
-          // Strip [ID:X] from display text - it's only for internal routing
+          // Strip {ID:X} from display text - it's only for internal routing
           const displayText = singleCitation.replace(DOCUMENT_ID_PATTERN, '').trim();
           return `[📄 ${displayText}](#cite:${encoded})`;
         }).join(' ');
@@ -255,7 +255,7 @@ export default function ChatInterface({
       
       // Single citation - encode and create link
       const encoded = encodeURIComponent(citationText);
-      // Strip [ID:X] from display text - it's only for internal routing
+      // Strip {ID:X} from display text - it's only for internal routing
       const displayText = citationText.replace(DOCUMENT_ID_PATTERN, '').trim();
       // Use #cite: instead of citation: to avoid sanitization
       return `[📄 ${displayText}](#cite:${encoded})`;
@@ -274,7 +274,7 @@ export default function ChatInterface({
       if (href?.startsWith('#cite:')) {
         const citationText = decodeURIComponent(href.replace('#cite:', ''));
         const parsed = parseCitationString(citationText, documents);
-        // Strip [ID:X] from display text - it's only for internal routing
+        // Strip {ID:X} from display text - it's only for internal routing
         const displayText = citationText.replace(DOCUMENT_ID_PATTERN, '').trim();
         
         return (
