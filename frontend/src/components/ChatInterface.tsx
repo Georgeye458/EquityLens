@@ -262,10 +262,12 @@ export default function ChatInterface({
   const preprocessContent = useCallback((content: string): string => {
     if (!onCitationClick) return content;
     
-    // FIRST: Strip ALL standalone [ID:...] patterns that LLM generates outside of citations
-    // Matches [ID:X], [ID:X-P8], [ID:X, Pg 8], [ID:X, Page 32], etc.
-    // These don't match CITATION_REGEX (which requires "page/pages/p.") so they'd render as plain text
-    let processed = content.replace(/\[ID:\d+[^\]]*\]/gi, '');
+    // FIRST: Strip ALL ID patterns that LLM generates (both square and curly bracket variants)
+    // Square brackets: [ID:X], [ID:X-P8], [ID:X, Pg 8], etc.
+    // Curly braces: {ID:X} (the format we instruct the LLM to use)
+    let processed = content
+      .replace(/\[ID:\d+[^\]]*\]/gi, '')  // Strip [ID:...] patterns
+      .replace(/\{ID:\d+\}/gi, '');        // Strip {ID:X} patterns
     
     // Replace [Page X] or [DOC - Page X] with markdown links using a hash-based protocol
     processed = processed.replace(CITATION_REGEX, (_fullMatch, citationText) => {
