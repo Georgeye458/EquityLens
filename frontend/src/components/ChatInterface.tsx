@@ -25,10 +25,15 @@ interface ChatInterfaceProps {
 
 // Regex to match citation patterns like [Page 15], [Pages 10-12], [WBC - Page 15], [Document Name - p. 5]
 // Also matches multi-citations like [Doc1 - Page 1; Doc2 - Page 2]
+// Updated to also match citations with embedded IDs like [WBC [ID:42] - Page 15]
 const CITATION_REGEX = /\[([^\]]*?(?:page|pages|p\.)\s*\d+(?:\s*[-–]\s*\d+)?(?:\s*;[^\]]*?(?:page|pages|p\.)\s*\d+(?:\s*[-–]\s*\d+)?)*)\]/gi;
 
 // Single citation pattern (used for parsing individual citations)
+// Updated to capture optional [ID:X] in document name
 const SINGLE_CITATION_PATTERN = /^(.+?)\s*[-–]\s*(?:page|pages|p\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i;
+
+// Pattern to extract document ID from label like "WBC Full Year [ID:42]"
+const DOCUMENT_ID_PATTERN = /\[ID:(\d+)\]/i;
 
 // Parse a citation string to extract document name and page number, with document ID matching
 function parseCitationString(
@@ -48,7 +53,22 @@ function parseCitationString(
     const pageNumber = parseInt(withDocMatch[2], 10);
     const pageEnd = withDocMatch[3] ? parseInt(withDocMatch[3], 10) : undefined;
     
-    // Try to match document name to actual document
+    // PRIORITY 1: Check for embedded document ID in the citation text [ID:X]
+    // This is the most reliable method - the backend embeds the actual ID
+    const idMatch = docName.match(DOCUMENT_ID_PATTERN);
+    if (idMatch) {
+      const embeddedId = parseInt(idMatch[1], 10);
+      // Clean the document name by removing the ID tag for display
+      const cleanDocName = docName.replace(DOCUMENT_ID_PATTERN, '').trim();
+      return {
+        documentName: cleanDocName,
+        pageNumber,
+        pageEnd,
+        documentId: embeddedId,
+      };
+    }
+    
+    // FALLBACK: Try to match document name to actual document (legacy behavior)
     let documentId: number | undefined;
     if (documents && documents.length > 0) {
       let docNameLower = docName.trim().toLowerCase();

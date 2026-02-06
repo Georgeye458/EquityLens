@@ -26,6 +26,9 @@ pdfplumber>=0.10.0
 httpx>=0.26.0
 aiofiles>=23.2.0
 
+# AWS S3 Storage (Bucketeer)
+boto3>=1.34.0
+
 # Utilities
 python-dotenv>=1.0.0
 tenacity>=8.2.0

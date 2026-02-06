@@ -21,7 +21,7 @@ CRITICAL: You have access to the FULL source documents through the provided cont
 
 Guidelines:
 1. Answer questions thoroughly using information from the provided document chunks
-2. ALWAYS cite your sources with document and page in this format: [TICKER - Page X] (e.g., [WBC - Page 15])
+2. ALWAYS cite your sources using the EXACT format from the context headers (including the [ID:X] tag if present)
 3. When comparing across documents, clearly indicate which document each piece of information comes from
 4. If information is found in multiple places, cite all relevant sources
 5. If you're uncertain about something, say so rather than guessing
@@ -29,16 +29,22 @@ Guidelines:
 7. Distinguish between direct quotes and your interpretation
 8. If the question cannot be answered from the provided context, say so clearly
 
-When citing:
-- Use [TICKER - Page X] for single page references (e.g., [WBC - Page 15])
-- Use [TICKER - Pages X-Y] for ranges
-- Include brief quotes when particularly relevant
+IMPORTANT: When citing, use the exact document label from the context including the ID tag:
+- Use [Document Name [ID:X] - Page Y] format exactly as shown in context headers
+- This ensures accurate document linking for users
+- Example: [WBC Full Year Results [ID:42] - Page 15]
 
 Remember: Users trust you for accurate, well-cited analysis. Quality and traceability are paramount."""
 
 
-def get_document_label(doc: Document) -> str:
-    """Generate a distinctive label for a document based on filename, ticker, and period."""
+def get_document_label(doc: Document, include_id: bool = False) -> str:
+    """
+    Generate a distinctive label for a document based on filename, ticker, and period.
+    
+    Args:
+        doc: Document object
+        include_id: If True, append document ID for reliable frontend matching
+    """
     import re
     
     # If we have a filename, use it as the primary source
@@ -55,6 +61,9 @@ def get_document_label(doc: Document) -> str:
         name = name.strip()
         if len(name) > 30:
             name = name[:27] + '...'
+        
+        if include_id:
+            return f"{name} [ID:{doc.id}]"
         return name
     
     # Fallback: construct from metadata
@@ -81,7 +90,11 @@ def get_document_label(doc: Document) -> str:
     if doc.document_type and doc.document_type in type_labels:
         parts.append(type_labels[doc.document_type])
     
-    return ' '.join(parts) if parts else 'Document'
+    label = ' '.join(parts) if parts else 'Document'
+    
+    if include_id:
+        return f"{label} [ID:{doc.id}]"
+    return label
 
 
 def strip_thinking_tags(text: str) -> str:
@@ -242,13 +255,17 @@ class ChatService:
                 top_k=15,  # Get more when searching multiple docs
             )
 
-        # Build context from retrieved chunks with document identifiers
+        # Build context from retrieved chunks with document identifiers (including ID for reliable matching)
         context_parts = []
         citations = []
 
         for chunk, score in retrieved:
             doc = doc_info.get(chunk.document_id)
-            doc_label = get_document_label(doc) if doc else f"Doc {chunk.document_id}"
+            # Include ID in label for multi-document scenarios to enable reliable frontend matching
+            include_id = len(document_ids) > 1
+            doc_label = get_document_label(doc, include_id=include_id) if doc else f"Doc [ID:{chunk.document_id}]"
+            # Store clean label without ID for display
+            doc_label_display = get_document_label(doc, include_id=False) if doc else f"Doc {chunk.document_id}"
             
             context_parts.append(
                 f"[{doc_label} - Page {chunk.page_number}]\n{chunk.content}"
@@ -258,14 +275,15 @@ class ChatService:
                 "text": chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
                 "relevance_score": score,
                 "document_id": chunk.document_id,
-                "document_name": doc_label,
+                "document_name": doc_label_display,
             })
 
         context = "\n\n---\n\n".join(context_parts)
         
-        # Build document list for context
+        # Build document list for context (with IDs for multi-doc)
+        include_id = len(document_ids) > 1
         doc_list = ", ".join([
-            get_document_label(doc_info[did])
+            get_document_label(doc_info[did], include_id=include_id)
             for did in document_ids if did in doc_info
         ])
 
@@ -293,7 +311,7 @@ class ChatService:
 
 Question: {user_message}
 
-Please provide a thorough answer with citations in the format [TICKER - Page X].""",
+Please provide a thorough answer with citations using the exact document labels from the context headers (including [ID:X] if present).""",
         })
 
         # Generate response
@@ -394,13 +412,17 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
         
         logger.info(f"Chat stream: retrieval took {time.time() - retrieval_start:.3f}s")
 
-        # Build context from retrieved chunks with document identifiers
+        # Build context from retrieved chunks with document identifiers (including ID for reliable matching)
         context_parts = []
         citations = []
 
         for chunk, score in retrieved:
             doc = doc_info.get(chunk.document_id)
-            doc_label = get_document_label(doc) if doc else f"Doc {chunk.document_id}"
+            # Include ID in label for multi-document scenarios to enable reliable frontend matching
+            include_id = len(document_ids) > 1
+            doc_label = get_document_label(doc, include_id=include_id) if doc else f"Doc [ID:{chunk.document_id}]"
+            # Store clean label without ID for display
+            doc_label_display = get_document_label(doc, include_id=False) if doc else f"Doc {chunk.document_id}"
             
             context_parts.append(
                 f"[{doc_label} - Page {chunk.page_number}]\n{chunk.content}"
@@ -410,14 +432,15 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
                 "text": chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
                 "relevance_score": score,
                 "document_id": chunk.document_id,
-                "document_name": doc_label,
+                "document_name": doc_label_display,
             })
 
         context = "\n\n---\n\n".join(context_parts)
         
-        # Build document list for context
+        # Build document list for context (with IDs for multi-doc)
+        include_id = len(document_ids) > 1
         doc_list = ", ".join([
-            get_document_label(doc_info[did])
+            get_document_label(doc_info[did], include_id=include_id)
             for did in document_ids if did in doc_info
         ])
 
@@ -454,7 +477,7 @@ Please provide a thorough answer with citations in the format [TICKER - Page X].
 
 Question: {user_message}
 
-Please provide a thorough answer with citations in the format [TICKER - Page X].""",
+Please provide a thorough answer with citations using the exact document labels from the context headers (including [ID:X] if present).""",
         })
         
         logger.info(f"Chat stream: total prep took {time.time() - start_time:.3f}s, starting LLM stream...")

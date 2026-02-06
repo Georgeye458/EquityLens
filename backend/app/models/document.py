@@ -36,13 +36,16 @@ class Document(Base):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True, index=True)
+    uuid = Column(String(36), unique=True, nullable=True, index=True)  # Unique identifier for distributed systems
     filename = Column(String(255), nullable=False)
     company_name = Column(String(255), nullable=False)
     company_ticker = Column(String(20), nullable=True)
     document_type = Column(String(50), default=DocumentType.OTHER.value)
     reporting_period = Column(String(50), nullable=True)
     
-    file_path = Column(String(500), nullable=True)
+    file_path = Column(String(500), nullable=True)  # Local path (fallback)
+    s3_key = Column(String(500), nullable=True)  # S3 storage key
+    content_hash = Column(String(64), nullable=True, index=True)  # SHA-256 for deduplication
     file_size_bytes = Column(Integer, nullable=True)
     page_count = Column(Integer, nullable=True)
     
@@ -94,6 +97,7 @@ class DocumentCreate(BaseModel):
 class DocumentResponse(BaseModel):
     """Schema for document response."""
     id: int
+    uuid: Optional[str] = None
     filename: str
     company_name: str
     company_ticker: Optional[str]
@@ -102,11 +106,31 @@ class DocumentResponse(BaseModel):
     page_count: Optional[int]
     status: str
     error_message: Optional[str]
+    has_s3_storage: bool = False  # Indicates if PDF is persisted in S3
     created_at: datetime
     processed_at: Optional[datetime]
 
     class Config:
         from_attributes = True
+    
+    @classmethod
+    def from_document(cls, doc: "Document") -> "DocumentResponse":
+        """Create response from Document model with computed fields."""
+        return cls(
+            id=doc.id,
+            uuid=doc.uuid,
+            filename=doc.filename,
+            company_name=doc.company_name,
+            company_ticker=doc.company_ticker,
+            document_type=doc.document_type,
+            reporting_period=doc.reporting_period,
+            page_count=doc.page_count,
+            status=doc.status,
+            error_message=doc.error_message,
+            has_s3_storage=bool(doc.s3_key),
+            created_at=doc.created_at,
+            processed_at=doc.processed_at,
+        )
 
 
 class DocumentListResponse(BaseModel):

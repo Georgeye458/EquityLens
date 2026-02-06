@@ -1,6 +1,7 @@
 // Document types
 export interface Document {
   id: number;
+  uuid: string | null;
   filename: string;
   company_name: string;
   company_ticker: string | null;
@@ -9,6 +10,7 @@ export interface Document {
   page_count: number | null;
   status: ProcessingStatus;
   error_message: string | null;
+  has_s3_storage: boolean;  // Indicates if PDF is persisted in S3
   created_at: string;
   processed_at: string | null;
 }
