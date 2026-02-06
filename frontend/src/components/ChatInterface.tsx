@@ -34,8 +34,8 @@ const SINGLE_CITATION_PATTERN = /^(.+?)\s*[-–]\s*(?:page|pages|p\.?)\s*(\d+)(?
 
 // Pattern to extract document ID from label like "WBC Full Year {ID:42}"
 const DOCUMENT_ID_PATTERN = /\{ID:(\d+)\}/i;
-// Fallback pattern for LLM-generated variants like [ID:42] or [ID:42-P5]
-const DOCUMENT_ID_FALLBACK_PATTERN = /\[ID:(\d+)(?:-P?\d+)?\]/gi;
+// Fallback pattern for ALL LLM-generated variants: [ID:42], [ID:42-P5], [ID:42, Pg 8], etc.
+const DOCUMENT_ID_FALLBACK_PATTERN = /\[ID:(\d+)[^\]]*\]/gi;
 
 // Helper function to strip all ID patterns from display text
 function stripIdPatterns(text: string): string {
@@ -262,9 +262,10 @@ export default function ChatInterface({
   const preprocessContent = useCallback((content: string): string => {
     if (!onCitationClick) return content;
     
-    // FIRST: Strip standalone [ID:X] or [ID:X-P8] patterns that LLM generates outside of citations
+    // FIRST: Strip ALL standalone [ID:...] patterns that LLM generates outside of citations
+    // Matches [ID:X], [ID:X-P8], [ID:X, Pg 8], [ID:X, Page 32], etc.
     // These don't match CITATION_REGEX (which requires "page/pages/p.") so they'd render as plain text
-    let processed = content.replace(/\[ID:\d+(?:-P?\d+)?\]/gi, '');
+    let processed = content.replace(/\[ID:\d+[^\]]*\]/gi, '');
     
     // Replace [Page X] or [DOC - Page X] with markdown links using a hash-based protocol
     processed = processed.replace(CITATION_REGEX, (_fullMatch, citationText) => {
