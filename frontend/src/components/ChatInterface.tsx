@@ -34,6 +34,16 @@ const SINGLE_CITATION_PATTERN = /^(.+?)\s*[-–]\s*(?:page|pages|p\.?)\s*(\d+)(?
 
 // Pattern to extract document ID from label like "WBC Full Year {ID:42}"
 const DOCUMENT_ID_PATTERN = /\{ID:(\d+)\}/i;
+// Fallback pattern for LLM-generated variants like [ID:42] or [ID:42-P5]
+const DOCUMENT_ID_FALLBACK_PATTERN = /\[ID:(\d+)(?:-P?\d+)?\]/gi;
+
+// Helper function to strip all ID patterns from display text
+function stripIdPatterns(text: string): string {
+  return text
+    .replace(DOCUMENT_ID_PATTERN, '')
+    .replace(DOCUMENT_ID_FALLBACK_PATTERN, '')
+    .trim();
+}
 
 // Parse a citation string to extract document name and page number, with document ID matching
 function parseCitationString(
@@ -59,7 +69,20 @@ function parseCitationString(
     if (idMatch) {
       const embeddedId = parseInt(idMatch[1], 10);
       // Clean the document name by removing the ID tag for display
-      const cleanDocName = docName.replace(DOCUMENT_ID_PATTERN, '').trim();
+      const cleanDocName = stripIdPatterns(docName);
+      return {
+        documentName: cleanDocName,
+        pageNumber,
+        pageEnd,
+        documentId: embeddedId,
+      };
+    }
+    
+    // PRIORITY 2: Check for LLM-generated fallback patterns like [ID:X] or [ID:X-P5]
+    const fallbackIdMatch = docName.match(/\[ID:(\d+)/i);
+    if (fallbackIdMatch) {
+      const embeddedId = parseInt(fallbackIdMatch[1], 10);
+      const cleanDocName = stripIdPatterns(docName);
       return {
         documentName: cleanDocName,
         pageNumber,
@@ -247,16 +270,16 @@ export default function ChatInterface({
         const citations = citationText.split(';').map((c: string) => c.trim()).filter(Boolean);
         return citations.map((singleCitation: string) => {
           const encoded = encodeURIComponent(singleCitation);
-          // Strip {ID:X} from display text - it's only for internal routing
-          const displayText = singleCitation.replace(DOCUMENT_ID_PATTERN, '').trim();
+          // Strip ID patterns from display text - it's only for internal routing
+          const displayText = stripIdPatterns(singleCitation);
           return `[📄 ${displayText}](#cite:${encoded})`;
         }).join(' ');
       }
       
       // Single citation - encode and create link
       const encoded = encodeURIComponent(citationText);
-      // Strip {ID:X} from display text - it's only for internal routing
-      const displayText = citationText.replace(DOCUMENT_ID_PATTERN, '').trim();
+      // Strip ID patterns from display text - it's only for internal routing
+      const displayText = stripIdPatterns(citationText);
       // Use #cite: instead of citation: to avoid sanitization
       return `[📄 ${displayText}](#cite:${encoded})`;
     });
@@ -274,8 +297,8 @@ export default function ChatInterface({
       if (href?.startsWith('#cite:')) {
         const citationText = decodeURIComponent(href.replace('#cite:', ''));
         const parsed = parseCitationString(citationText, documents);
-        // Strip {ID:X} from display text - it's only for internal routing
-        const displayText = citationText.replace(DOCUMENT_ID_PATTERN, '').trim();
+        // Strip ID patterns from display text - it's only for internal routing
+        const displayText = stripIdPatterns(citationText);
         
         return (
           <span
