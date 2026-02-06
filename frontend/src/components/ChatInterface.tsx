@@ -247,14 +247,18 @@ export default function ChatInterface({
         const citations = citationText.split(';').map((c: string) => c.trim()).filter(Boolean);
         return citations.map((singleCitation: string) => {
           const encoded = encodeURIComponent(singleCitation);
-          return `[📄 ${singleCitation}](#cite:${encoded})`;
+          // Strip [ID:X] from display text - it's only for internal routing
+          const displayText = singleCitation.replace(DOCUMENT_ID_PATTERN, '').trim();
+          return `[📄 ${displayText}](#cite:${encoded})`;
         }).join(' ');
       }
       
       // Single citation - encode and create link
       const encoded = encodeURIComponent(citationText);
+      // Strip [ID:X] from display text - it's only for internal routing
+      const displayText = citationText.replace(DOCUMENT_ID_PATTERN, '').trim();
       // Use #cite: instead of citation: to avoid sanitization
-      return `[📄 ${citationText}](#cite:${encoded})`;
+      return `[📄 ${displayText}](#cite:${encoded})`;
     });
     
     return processed;
@@ -270,6 +274,8 @@ export default function ChatInterface({
       if (href?.startsWith('#cite:')) {
         const citationText = decodeURIComponent(href.replace('#cite:', ''));
         const parsed = parseCitationString(citationText, documents);
+        // Strip [ID:X] from display text - it's only for internal routing
+        const displayText = citationText.replace(DOCUMENT_ID_PATTERN, '').trim();
         
         return (
           <span
@@ -291,7 +297,7 @@ export default function ChatInterface({
             title={`Click to view ${parsed?.documentName ? parsed.documentName + ' - ' : ''}Page ${parsed?.pageNumber || '?'}`}
           >
             <FileText className="w-3 h-3 mr-1 flex-shrink-0" />
-            <span>{citationText}</span>
+            <span>{displayText}</span>
           </span>
         );
       }
