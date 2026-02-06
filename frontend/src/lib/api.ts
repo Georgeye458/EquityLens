@@ -336,6 +336,8 @@ export const chatApi = {
                 onDone?.();
               } else if (data.type === 'error') {
                 onError?.(data.error);
+              } else if (data.type === 'heartbeat') {
+                // Heartbeat received - connection is alive, no action needed
               }
             } catch (e) {
               // Ignore JSON parse errors for incomplete chunks

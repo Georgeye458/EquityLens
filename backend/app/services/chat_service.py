@@ -314,12 +314,13 @@ Question: {user_message}
 Please provide a thorough answer with citations using the exact document labels from the context headers (including {{ID:X}} if present).""",
         })
 
-        # Generate response
+        # Generate response (with max_tokens to prevent runaway responses and timeouts)
         raw_response = await scx_client.chat_completion(
             messages=messages,
             model=model,
             system_prompt=CHAT_SYSTEM_PROMPT,
             temperature=0.7,
+            max_tokens=4096,  # Reasonable limit for financial analysis responses
         )
         
         # Strip <think> tags from DeepSeek-R1 responses
@@ -493,6 +494,7 @@ Please provide a thorough answer with citations using the exact document labels 
             model=model,
             system_prompt=CHAT_SYSTEM_PROMPT,
             temperature=0.7,
+            max_tokens=4096,  # Reasonable limit for financial analysis responses
         ):
             full_response += chunk
             buffer += chunk

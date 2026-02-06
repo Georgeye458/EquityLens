@@ -168,26 +168,78 @@ async def send_message_stream(
     
     Note: Creates its own database session to avoid FastAPI closing the session
     before streaming completes.
+    
+    Includes keep-alive heartbeats every 15s to prevent Heroku 30s timeout
+    during DeepSeek's "thinking" phase.
     """
     async def generate():
         # Create independent DB session for the generator's lifetime
         from app.services.database import async_session
         
+        # Send initial heartbeat immediately to confirm connection
+        yield f"data: {json.dumps({'type': 'heartbeat', 'status': 'connected'})}\n\n"
+        
         async with async_session() as db:
             try:
-                async for chunk in chat_service.send_message_stream(
-                    db=db,
-                    session_id=session_id,
-                    user_message=message.content,
-                    model=settings.scx_model,
-                ):
-                    # Send as SSE format
-                    yield f"data: {json.dumps({'type': 'content', 'data': chunk})}\n\n"
-                    await asyncio.sleep(0)  # Allow other tasks to run
+                # Use an async queue to handle both heartbeats and content
+                queue: asyncio.Queue = asyncio.Queue()
+                stream_complete = False
                 
-                # Send completion signal
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                async def stream_content():
+                    """Stream content from LLM and put in queue."""
+                    nonlocal stream_complete
+                    try:
+                        async for chunk in chat_service.send_message_stream(
+                            db=db,
+                            session_id=session_id,
+                            user_message=message.content,
+                            model=settings.scx_model,
+                        ):
+                            await queue.put(('content', chunk))
+                        await queue.put(('done', None))
+                    except Exception as e:
+                        await queue.put(('error', str(e)))
+                    finally:
+                        stream_complete = True
                 
+                async def heartbeat_sender():
+                    """Send heartbeats every 15s while stream is active."""
+                    while not stream_complete:
+                        await asyncio.sleep(15)
+                        if not stream_complete:
+                            await queue.put(('heartbeat', None))
+                
+                # Start both tasks
+                content_task = asyncio.create_task(stream_content())
+                heartbeat_task = asyncio.create_task(heartbeat_sender())
+                
+                try:
+                    while True:
+                        try:
+                            # Wait for next item with timeout
+                            msg_type, data = await asyncio.wait_for(queue.get(), timeout=20)
+                            
+                            if msg_type == 'content':
+                                yield f"data: {json.dumps({'type': 'content', 'data': data})}\n\n"
+                            elif msg_type == 'heartbeat':
+                                yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                            elif msg_type == 'done':
+                                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                                break
+                            elif msg_type == 'error':
+                                yield f"data: {json.dumps({'type': 'error', 'error': f'Chat error: {data}'})}\n\n"
+                                break
+                        except asyncio.TimeoutError:
+                            # Send heartbeat on timeout to keep connection alive
+                            yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                finally:
+                    # Clean up tasks
+                    heartbeat_task.cancel()
+                    try:
+                        await heartbeat_task
+                    except asyncio.CancelledError:
+                        pass
+                    
             except ValueError as e:
                 yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
             except Exception as e:
