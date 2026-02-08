@@ -160,6 +160,7 @@ async def send_message(
 async def send_message_stream(
     session_id: int,
     message: ChatMessageCreate,
+    model: Optional[str] = None,
 ):
     """
     Send a message and get streaming AI response.
@@ -167,60 +168,79 @@ async def send_message_stream(
     Returns Server-Sent Events (SSE) for real-time streaming.
     Sends heartbeats every 10s to prevent Heroku 30s timeout during LLM thinking phase.
     
+    Uses an asyncio.Queue to decouple the LLM stream consumer from the SSE output,
+    preventing asyncio.wait_for from cancelling the generator during long thinking phases.
+    
     Note: Creates its own database session to avoid FastAPI closing the session
     before streaming completes.
     """
+    # Use model from query param, fall back to server default
+    selected_model = model or settings.scx_model
+
     async def generate():
         # Create independent DB session for the generator's lifetime
         from app.services.database import async_session
-        import time
-        
+
         # Send initial heartbeat immediately to establish connection
         yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
-        
+
         async with async_session() as db:
+            # Queue decouples LLM consumption from SSE output so that
+            # heartbeat timeouts don't cancel the stream generator.
+            queue: asyncio.Queue = asyncio.Queue()
+            heartbeat_interval = 10  # seconds
+
+            async def consume_stream():
+                """Background task: reads LLM stream chunks into the queue."""
+                try:
+                    async for chunk in chat_service.send_message_stream(
+                        db=db,
+                        session_id=session_id,
+                        user_message=message.content,
+                        model=selected_model,
+                    ):
+                        await queue.put(("content", chunk))
+                    await queue.put(("done", None))
+                except ValueError as e:
+                    await queue.put(("error", str(e)))
+                except Exception as e:
+                    await queue.put(("error", f"Chat error: {str(e)}"))
+
+            # Start the consumer as an independent task — it keeps running
+            # even when queue.get() times out for heartbeats.
+            task = asyncio.create_task(consume_stream())
+
             try:
-                # Track last output time for heartbeats
-                last_output_time = time.time()
-                heartbeat_interval = 10  # seconds
-                
-                # Create an async iterator we can manually advance
-                stream_iter = chat_service.send_message_stream(
-                    db=db,
-                    session_id=session_id,
-                    user_message=message.content,
-                    model=settings.scx_model,
-                ).__aiter__()
-                
                 while True:
                     try:
-                        # Wait for next chunk with timeout
-                        chunk = await asyncio.wait_for(
-                            stream_iter.__anext__(),
-                            timeout=heartbeat_interval
+                        msg_type, data = await asyncio.wait_for(
+                            queue.get(), timeout=heartbeat_interval
                         )
-                        # Got content - send it
-                        yield f"data: {json.dumps({'type': 'content', 'data': chunk})}\n\n"
-                        last_output_time = time.time()
-                        
+
+                        if msg_type == "content":
+                            yield f"data: {json.dumps({'type': 'content', 'data': data})}\n\n"
+                        elif msg_type == "done":
+                            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                            break
+                        elif msg_type == "error":
+                            yield f"data: {json.dumps({'type': 'error', 'error': data})}\n\n"
+                            break
+
                     except asyncio.TimeoutError:
-                        # No content in heartbeat_interval seconds - send heartbeat
+                        # Queue empty for heartbeat_interval — send heartbeat
+                        # to keep Heroku router / client connection alive.
+                        # The background task is still running undisturbed.
                         yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
-                        # Continue waiting for content
                         continue
-                        
-                    except StopAsyncIteration:
-                        # Stream finished
-                        break
-                
-                # Send completion signal
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                
-            except ValueError as e:
-                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-            except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'error': f'Chat error: {str(e)}'})}\n\n"
-    
+            finally:
+                # Clean up the background task if it's still running
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
