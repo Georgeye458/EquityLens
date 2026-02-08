@@ -57,8 +57,9 @@ This is the fundamental differentiator from failed prior implementations. Docume
 
 ### Deployment
 - **Platform**: Heroku
-- **Backend App**: equitylens-api
-- **Frontend App**: equitylens-frontend
+- **Backend App**: equitylens-api ([live](https://equitylens-api-9dbfeb496250.herokuapp.com))
+- **Frontend App**: equitylens-frontend ([live](https://equitylens-frontend-e430b9f9b114.herokuapp.com))
+- **File Storage**: Bucketeer (S3-compatible) for persistent PDF storage
 
 ## Project Structure
 
@@ -153,10 +154,11 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ```env
 SCX_API_KEY=your-scx-api-key
 SCX_API_BASE_URL=https://api.scx.ai/v1
-SCX_MODEL=llama-4
+SCX_MODEL=DeepSeek-R1-0528
+SCX_EMBEDDING_MODEL=E5-Mistral-7B-Instruct
 DATABASE_URL=postgresql://user:password@localhost:5432/equitylens
 SECRET_KEY=your-secret-key
-ALLOWED_ORIGINS=http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
 ### Frontend (.env)
@@ -164,6 +166,8 @@ ALLOWED_ORIGINS=http://localhost:5173
 ```env
 VITE_API_URL=http://localhost:8000
 ```
+
+> See `backend/.env.example` and `frontend/env.example` for full configuration templates.
 
 ## API Endpoints
 
@@ -188,10 +192,13 @@ VITE_API_URL=http://localhost:8000
 
 | Model | Use Case |
 |-------|----------|
-| `llama-4` | Fast, accurate - recommended for general use |
+| `DeepSeek-R1-0528` | Deep reasoning - default for POI extraction and chat |
+| `llama-4` | Fast, accurate for general use |
 | `deepseek-v3.1` | Strong reasoning for complex analysis |
 | `gpt-oss-120b` | Open-source GPT variant |
 | `magpie` | Australian sovereign model |
+
+> **Default model**: `DeepSeek-R1-0528` is the current default for all analysis and chat operations. Embedding model: `E5-Mistral-7B-Instruct`.
 
 ## Points of Interest (POIs)
 

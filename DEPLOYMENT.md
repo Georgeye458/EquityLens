@@ -9,6 +9,16 @@ This guide covers deploying EquityLens to Heroku as two separate applications (b
 - A Heroku account with billing enabled (for add-ons)
 - SCX.ai API key
 
+## Current Deployment URLs
+
+| App | URL |
+|-----|-----|
+| **Backend API** | https://equitylens-api-9dbfeb496250.herokuapp.com |
+| **Frontend App** | https://equitylens-frontend-e430b9f9b114.herokuapp.com |
+| **API Health Check** | https://equitylens-api-9dbfeb496250.herokuapp.com/health |
+
+> **Note:** Heroku appends a unique hash to app URLs. The URLs above are the actual production URLs.
+
 ## Git Remotes Setup
 
 The project uses three git remotes:
@@ -53,12 +63,19 @@ heroku create equitylens-frontend
 # Add PostgreSQL database
 heroku addons:create heroku-postgresql:essential-0 -a equitylens-api
 
+# Add Bucketeer for persistent S3 file storage (required for PDF uploads)
+heroku addons:create bucketeer:hobbyist -a equitylens-api
+
 # Set environment variables
 heroku config:set SCX_API_KEY=your-scx-api-key -a equitylens-api
 heroku config:set SCX_API_BASE_URL=https://api.scx.ai/v1 -a equitylens-api
-heroku config:set SCX_MODEL=llama-4 -a equitylens-api
-heroku config:set SECRET_KEY=your-secret-key-here -a equitylens-api
-heroku config:set ALLOWED_ORIGINS=https://equitylens-frontend.herokuapp.com -a equitylens-api
+heroku config:set SCX_MODEL=DeepSeek-R1-0528 -a equitylens-api
+heroku config:set SCX_EMBEDDING_MODEL=E5-Mistral-7B-Instruct -a equitylens-api
+heroku config:set SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(32))") -a equitylens-api
+heroku config:set ALLOWED_ORIGINS=https://equitylens-frontend-e430b9f9b114.herokuapp.com -a equitylens-api
+
+# Note: Bucketeer automatically sets BUCKETEER_AWS_ACCESS_KEY_ID,
+# BUCKETEER_AWS_SECRET_ACCESS_KEY, BUCKETEER_BUCKET_NAME, and BUCKETEER_AWS_REGION
 
 # Verify configuration
 heroku config -a equitylens-api
@@ -67,8 +84,8 @@ heroku config -a equitylens-api
 ### Configure Frontend
 
 ```bash
-# Set environment variables
-heroku config:set VITE_API_URL=https://equitylens-api.herokuapp.com -a equitylens-frontend
+# Set environment variables (use the actual backend URL from heroku apps:info)
+heroku config:set VITE_API_URL=https://equitylens-api-9dbfeb496250.herokuapp.com -a equitylens-frontend
 
 # Set Node.js version
 heroku config:set NODE_OPTIONS=--max_old_space_size=2560 -a equitylens-frontend
@@ -170,9 +187,11 @@ heroku ps:scale web=1 -a equitylens-frontend
 
 After deployment, your apps will be available at:
 
-- **Backend API**: https://equitylens-api.herokuapp.com
-- **Frontend App**: https://equitylens-frontend.herokuapp.com
-- **API Health Check**: https://equitylens-api.herokuapp.com/health
+- **Backend API**: https://equitylens-api-9dbfeb496250.herokuapp.com
+- **Frontend App**: https://equitylens-frontend-e430b9f9b114.herokuapp.com
+- **API Health Check**: https://equitylens-api-9dbfeb496250.herokuapp.com/health
+
+> **Note:** Heroku assigns unique hashes to app URLs. Run `heroku apps:info -a <app-name>` to find the actual Web URL for your app.
 
 ## Troubleshooting
 
@@ -272,6 +291,7 @@ jobs:
 
 - **Basic Dynos**: Start with basic dynos ($7/month each)
 - **Database**: Use Essential-0 for development ($5/month)
+- **Bucketeer**: Hobbyist plan for S3 file storage ($5/month)
 - **Scale Down**: Use `heroku ps:scale web=0` when not in use
 
 ## Support
