@@ -19,14 +19,19 @@ logger = logging.getLogger(__name__)
 # Maximum characters to include in prompt (approximately 100k tokens worth)
 MAX_DOCUMENT_CHARS = 150000
 
-# Targeted queries for retrieval-based context (like chat) so the model sees focused, relevant chunks
-# Optimized to 3 queries to balance speed vs coverage
+# Targeted queries for retrieval-based context - aligned to each master prompt section
+# 8 focused queries for comprehensive coverage of all financial analysis areas
 REPORT_RETRIEVAL_QUERIES = [
-    "financial metrics revenue EBITDA NPAT balance sheet total assets shareholders equity margins ROE ratios segment analysis",
-    "cash flow operating free capital expenditure dividend payments working capital earnings quality provisions",
-    "management commentary outlook guidance strategic initiatives market conditions exceptional items non-recurring",
+    "total revenue growth rate segment revenue EBITDA EBIT NPAT statutory underlying gross profit margins",
+    "balance sheet net debt cash total assets shareholders equity ROE ROA debt ratio interest coverage EPS dividend per share book value",
+    "business segment division geographic region product category segment revenue EBITDA margin breakdown",
+    "cash flow statement operating cash flow investing financing free cash flow capital expenditure dividend payments",
+    "working capital trade receivables inventory trade payables days sales outstanding DSO accounts receivable turnover accounts payable",
+    "earnings quality provisions depreciation capitalised costs non-recurring adjustments impairment revenue recognition related party transactions",
+    "management commentary outlook guidance strategic initiatives market conditions risk factors strategy changes achievements",
+    "interest paid tax paid dividends from associates receipts from customers payments to suppliers and employees restructuring costs acquisition",
 ]
-REPORT_TOP_K_PER_QUERY = 10  # Reduced from 12 for faster generation
+REPORT_TOP_K_PER_QUERY = 15  # Higher top_k for comprehensive coverage
 
 
 class ReportGenerator:
@@ -97,7 +102,7 @@ class ReportGenerator:
             report_content = await scx_client.chat_completion(
                 messages=messages,
                 model=model,
-                temperature=0.3,  # Lower temperature for factual analysis
+                temperature=0.1,  # Very low temperature for precise financial data extraction
                 system_prompt=MASTER_ANALYSIS_SYSTEM_PROMPT,
             )
             
@@ -136,54 +141,33 @@ class ReportGenerator:
         document_id: int,
     ) -> tuple[str, int, int]:
         """
-        Get document content using retrieval (like chat) so the model sees focused,
-        relevant chunks instead of the entire document. This matches how chat gets
-        "complete data" by sending only the most relevant chunks per section.
-
-        Runs multiple targeted queries covering financial metrics, segments,
-        cash flow, management, earnings quality; merges and dedupes chunks;
-        returns content ordered by page, capped at MAX_DOCUMENT_CHARS.
+        Get full document content for comprehensive report generation.
+        
+        Loads ALL chunks ordered by page and chunk_index to give the model
+        complete document context. This ensures no financial data is missed
+        due to retrieval gaps. Falls back to retrieval-based approach only
+        if the full document exceeds MAX_DOCUMENT_CHARS.
 
         Returns:
             Tuple of (content_string, pages_included, pages_skipped)
         """
-        import asyncio
+        from app.models.document import DocumentChunk
+        from sqlalchemy import select as sa_select
         
-        seen_ids: set[int] = set()
-        chunks_with_order: list[tuple[int, int, object]] = []  # (page_num, chunk_index, chunk)
-
-        # Run all searches in parallel for faster execution
-        search_tasks = [
-            vector_store.search(
-                db=db,
-                query=query,
-                document_id=document_id,
-                top_k=REPORT_TOP_K_PER_QUERY,
-            )
-            for query in REPORT_RETRIEVAL_QUERIES
-        ]
-        all_results = await asyncio.gather(*search_tasks)
+        # Load ALL chunks for the document, ordered by page then chunk_index
+        result = await db.execute(
+            sa_select(DocumentChunk)
+            .where(DocumentChunk.document_id == document_id)
+            .order_by(DocumentChunk.page_number, DocumentChunk.chunk_index)
+        )
+        all_chunks = result.scalars().all()
         
-        # Process all results and dedupe
-        for retrieved in all_results:
-            for chk, _score in retrieved:
-                if chk.id in seen_ids:
-                    continue
-                seen_ids.add(chk.id)
-                page_num = chk.page_number or 0
-                chunk_index = getattr(chk, "chunk_index", 0)
-                chunks_with_order.append((page_num, chunk_index, chk))
-
-        if not chunks_with_order:
+        if not all_chunks:
             raise ValueError(f"No chunks found for document {document_id}")
-
-        # Sort by page then chunk_index so content flows in document order
-        chunks_with_order.sort(key=lambda x: (x[0], x[1]))
-        ordered_chunks = [c for _p, _i, c in chunks_with_order]
-
-        # Group by page and build content, capping at MAX_DOCUMENT_CHARS
+        
+        # Group by page
         pages: dict[int, list[str]] = {}
-        for chunk in ordered_chunks:
+        for chunk in all_chunks:
             page_num = chunk.page_number or 0
             if page_num not in pages:
                 pages[page_num] = []
@@ -201,7 +185,8 @@ class ReportGenerator:
             if total_chars + len(page_content) > MAX_DOCUMENT_CHARS:
                 remaining_pages = len([p for p in sorted_page_nums if p > page_num])
                 content_parts.append(
-                    f"\n\n[Additional pages omitted due to length limits]"
+                    f"\n\n[Additional {remaining_pages} pages omitted due to length limits. "
+                    f"Key financial data may appear in omitted pages.]"
                 )
                 pages_skipped = remaining_pages
                 break
@@ -209,6 +194,12 @@ class ReportGenerator:
             content_parts.append(f"[Page {page_num}]\n{page_content}")
             total_chars += len(page_content)
             pages_included += 1
+
+        logger.info(
+            f"Full document context: {pages_included} pages included, "
+            f"{pages_skipped} skipped, {total_chars} chars, "
+            f"{len(all_chunks)} total chunks"
+        )
 
         return "\n\n---\n\n".join(content_parts), pages_included, pages_skipped
 

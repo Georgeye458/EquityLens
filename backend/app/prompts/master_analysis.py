@@ -7,7 +7,15 @@ Always cite page numbers from the source document when referencing specific data
 For example: "Revenue increased to $500M [WBC - Page 12]" or "Net profit was $50M [Document - Page 8]".
 Include citations after key financial metrics, ratios, and any specific data points.
 Use millions as the base unit for monetary values and specify the currency.
-Be precise with numbers and calculations."""
+Be precise with numbers and calculations.
+
+CRITICAL ACCURACY RULES:
+1. ONLY report numbers that appear explicitly in the source document. If a specific data point is not found, write "Not disclosed" or "N/A" — do NOT estimate, infer, or fabricate values.
+2. Show your working for ALL calculated fields (ratios, margins, growth rates, EQ tables). For example: "EBITDA margin = EBITDA / Revenue = $500M / $2,000M = 25.0%"
+3. Label table columns with the ACTUAL reporting periods from the document (e.g., FY24, FY23, H1 FY24, H1 FY23) — do not use generic labels like "Current Period".
+4. Double-check all arithmetic: verify that growth rates are consistent with absolute values, ratios match their components, and totals add up correctly.
+5. When data appears in multiple places in the document, cross-reference to confirm consistency. Flag any discrepancies found.
+6. Clearly distinguish between statutory/reported figures and underlying/adjusted figures throughout."""
 
 
 MASTER_ANALYSIS_PROMPT = """I need you to analyse {company_name}'s {period} financial results. Please extract and analyse all key financial data compare on a year to year basis from the attached documents.
@@ -129,6 +137,15 @@ Also provide another table splitting out the exceptional items on a First half v
 - Note any significant changes in business strategy
 - Identify key performance drivers mentioned by management
 - Flag any concerns about data quality or presentation
+
+**ACCURACY & VALIDATION CHECKLIST (complete before finalizing):**
+1. Verify ALL numbers match the source document exactly — do not round or approximate
+2. Confirm all calculated ratios are arithmetically correct (show working)
+3. Check that growth rates are consistent with the absolute values presented
+4. Ensure totals and subtotals add up correctly in all tables
+5. Cross-reference figures that appear in multiple sections of the document
+6. For any data point not explicitly stated in the document, mark as "Not disclosed [N/A]" — do NOT estimate or fabricate
+7. Verify that period labels match the actual periods in the source document
 
 ---
 

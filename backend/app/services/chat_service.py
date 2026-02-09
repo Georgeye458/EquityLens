@@ -25,16 +25,19 @@ Guidelines:
 3. When comparing across documents, clearly indicate which document each piece of information comes from
 4. If information is found in multiple places, cite all relevant sources
 5. If you're uncertain about something, say so rather than guessing
-6. For numerical data, quote the exact figures from the document
+6. For numerical data, quote the EXACT figures from the document — do NOT estimate, round, or fabricate numbers
 7. Distinguish between direct quotes and your interpretation
-8. If the question cannot be answered from the provided context, say so clearly
+8. If the question cannot be answered from the provided context, say so clearly — write "Not disclosed" or "N/A" for missing data points
+9. Show your working for all calculations (margins, ratios, growth rates). For example: "EBITDA margin = $500M / $2,000M = 25.0%"
+10. Label periods with the actual reporting period names from the document (e.g., FY24, FY23), not generic labels
+11. Double-check arithmetic: verify growth rates match absolute values, ratios match their components
 
 IMPORTANT: When citing, use the exact document label from the context including the ID tag:
 - Use [Document Name {ID:X} - Page Y] format exactly as shown in context headers
 - This ensures accurate document linking for users
 - Example: [WBC Full Year Results {ID:42} - Page 15]
 
-Remember: Users trust you for accurate, well-cited analysis. Quality and traceability are paramount."""
+Remember: Users trust you for accurate, well-cited analysis. Quality and traceability are paramount. NEVER fabricate or hallucinate financial data."""
 
 
 def get_document_label(doc: Document, include_id: bool = False) -> str:
@@ -244,7 +247,7 @@ class ChatService:
                 db=db,
                 query=user_message,
                 document_id=document_ids[0],
-                top_k=10,
+                top_k=20,  # Increased for comprehensive financial analysis coverage
             )
         else:
             # Search across multiple documents
@@ -252,7 +255,7 @@ class ChatService:
                 db=db,
                 query=user_message,
                 document_ids=document_ids,
-                top_k=15,  # Get more when searching multiple docs
+                top_k=25,  # More chunks when searching multiple docs
             )
 
         # Build context from retrieved chunks with document identifiers (including ID for reliable matching)
@@ -319,8 +322,8 @@ Please provide a thorough answer with citations using the exact document labels 
             messages=messages,
             model=model,
             system_prompt=CHAT_SYSTEM_PROMPT,
-            temperature=0.7,
-            max_tokens=4096,  # Reasonable limit for financial analysis responses
+            temperature=0.1,  # Low temperature for accurate financial data extraction
+            max_tokens=12288,  # Large limit to accommodate comprehensive tables and analysis
         )
         
         # Strip <think> tags from DeepSeek-R1 responses
@@ -400,7 +403,7 @@ Please provide a thorough answer with citations using the exact document labels 
                 db=db,
                 query=user_message,
                 document_id=document_ids[0],
-                top_k=10,
+                top_k=20,  # Increased for comprehensive financial analysis coverage
             )
         else:
             # Search across multiple documents
@@ -408,7 +411,7 @@ Please provide a thorough answer with citations using the exact document labels 
                 db=db,
                 query=user_message,
                 document_ids=document_ids,
-                top_k=15,  # Get more when searching multiple docs
+                top_k=25,  # More chunks when searching multiple docs
             )
         
         logger.info(f"Chat stream: retrieval took {time.time() - retrieval_start:.3f}s")
@@ -493,8 +496,8 @@ Please provide a thorough answer with citations using the exact document labels 
             messages=messages,
             model=model,
             system_prompt=CHAT_SYSTEM_PROMPT,
-            temperature=0.7,
-            max_tokens=4096,  # Reasonable limit for financial analysis responses
+            temperature=0.1,  # Low temperature for accurate financial data extraction
+            max_tokens=12288,  # Large limit to accommodate comprehensive tables and analysis
         ):
             full_response += chunk
             buffer += chunk

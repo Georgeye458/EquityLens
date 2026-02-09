@@ -241,8 +241,8 @@ class ProcessingQueue:
         from app.services.database import async_session
         
         try:
-            # Extract texts
-            texts = [chunk["content"] for chunk in chunks]
+            # Extract texts with E5 passage prefix for better retrieval alignment
+            texts = [f"passage: {chunk['content']}" for chunk in chunks]
             
             # Generate embeddings
             embeddings = await scx_client.create_embeddings(texts)

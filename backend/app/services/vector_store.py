@@ -41,8 +41,8 @@ class VectorStore:
         Returns:
             List of created DocumentChunk objects
         """
-        # Extract texts for embedding
-        texts = [chunk["content"] for chunk in chunks]
+        # Extract texts for embedding with E5 passage prefix for better retrieval alignment
+        texts = [f"passage: {chunk['content']}" for chunk in chunks]
 
         # Create embeddings in batches
         batch_size = 20
@@ -100,10 +100,10 @@ class VectorStore:
         
         for i in range(0, total_chunks, batch_size):
             batch_chunks = chunks[i:i + batch_size]
-            batch_texts = [chunk["content"] for chunk in batch_chunks]
+            batch_texts = [f"passage: {chunk['content']}" for chunk in batch_chunks]
             
             try:
-                # Generate embeddings for this batch
+                # Generate embeddings for this batch with E5 passage prefix
                 logger.debug(f"Generating embeddings for batch {i // batch_size + 1}")
                 embeddings = await scx_client.create_embeddings(batch_texts)
                 
@@ -165,9 +165,10 @@ class VectorStore:
         import time
         search_start = time.time()
         
-        # Get query embedding
+        # Get query embedding with E5 instruction prefix for better retrieval
         embed_start = time.time()
-        query_embedding = await scx_client.create_embedding(query)
+        prefixed_query = f"Instruct: Retrieve financial document data relevant to this query\nQuery: {query}"
+        query_embedding = await scx_client.create_embedding(prefixed_query)
         logger.info(f"Vector search: embedding took {time.time() - embed_start:.3f}s")
 
         # Check cache first
@@ -249,8 +250,9 @@ class VectorStore:
         """
         import asyncio
         
-        # Get query embedding
-        query_embedding = await scx_client.create_embedding(query)
+        # Get query embedding with E5 instruction prefix for better retrieval
+        prefixed_query = f"Instruct: Retrieve financial document data relevant to this query\nQuery: {query}"
+        query_embedding = await scx_client.create_embedding(prefixed_query)
 
         # Separate cached and uncached documents
         cached_docs = []
