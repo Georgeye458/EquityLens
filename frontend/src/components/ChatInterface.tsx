@@ -388,13 +388,17 @@ export default function ChatInterface({
     </span>
   );
 
-  const suggestedQuestions = [
-    "What were the key revenue drivers this period?",
-    "How did margins change compared to last year?",
-    "What guidance did management provide?",
-    "Are there any earnings quality concerns?",
-    "Summarize the segment performance",
-  ];
+  const suggestedQuestions = documents && documents.length > 1
+    ? [
+        "Summarize the key findings across these documents",
+        "What are the total portfolio holdings and their values?",
+        "Compare performance across the documents",
+      ]
+    : [
+        "Summarize the key information in this document",
+        "What are the most important figures or data points?",
+        "Are there any notable items or concerns?",
+      ];
 
   return (
     <Card className="flex flex-col h-[700px] overflow-hidden">
@@ -424,7 +428,7 @@ export default function ChatInterface({
                 Start a conversation
               </h4>
               <p className="text-xs text-muted-foreground mb-4">
-                Ask anything about this earnings report. I have access to the full document.
+                Ask anything about {documents && documents.length > 1 ? 'these documents' : 'this document'}. I have access to the full content.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 {suggestedQuestions.slice(0, 3).map((question, idx) => (

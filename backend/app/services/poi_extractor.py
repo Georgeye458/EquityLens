@@ -15,14 +15,20 @@ from app.services.scx_client import scx_client
 logger = logging.getLogger(__name__)
 
 # Master prompt for POI extraction + executive summary in one response
-POI_EXTRACTION_PROMPT = """You are an expert equity analyst assistant. Your task is to extract key Points of Interest (POIs) from earnings report documents AND write a concise executive summary in a single response.
+POI_EXTRACTION_PROMPT = """You are an expert financial analyst assistant. Your task is to extract key Points of Interest (POIs) from financial documents AND write a concise executive summary in a single response.
+
+ENTITY ACCURACY (MANDATORY):
+- Only use company names, fund names, tickers, and entity names that appear VERBATIM in the document.
+- NEVER substitute or infer entity names. If the document says "EFM Group", use "EFM Group" — NOT "FMG" or "Fortescue."
 
 For each POI, provide:
 1. The extracted value(s) - use the exact figures from the document
 2. Page number citations - where the information was found
 3. Confidence level (high/medium/low) based on clarity of the source
 
-Extract the following categories of information:
+Determine the document type and extract accordingly:
+
+**For EARNINGS REPORTS / FINANCIAL STATEMENTS, extract:**
 
 ## Financial Metrics
 - Revenue & Growth: Total revenue, segment breakdown, growth rates
@@ -39,24 +45,36 @@ Extract the following categories of information:
 - Product categories performance
 
 ## Cash Flow
-- Operating cash flow
-- Free cash flow
-- Capital expenditure
-- Dividend payments
+- Operating cash flow, free cash flow, capital expenditure, dividend payments
 
 ## Management Commentary
-- Strategy changes and initiatives
-- Outlook and guidance
-- Risk factors highlighted
-- Market conditions commentary
+- Strategy changes, outlook and guidance, risk factors, market conditions
 
 ## Earnings Quality Indicators
-- Non-recurring adjustments
-- Capitalised costs changes
-- Provision changes
-- Working capital signals
-- Cash vs accrual comparison
-- Revenue recognition notes
+- Non-recurring adjustments, capitalised costs, provision changes, working capital signals
+
+**For PORTFOLIO VALUATIONS / CUSTODIAN STATEMENTS / INVESTMENT REPORTS, extract:**
+
+## Financial Metrics
+- Total portfolio value / NAV
+- Number of holdings / securities
+- Performance returns (by period if available)
+- Fee disclosures
+
+## Segment Analysis
+- Asset allocation by asset class, geography, or sector
+- Top holdings by weight or value
+
+## Cash Flow
+- Contributions, withdrawals, distributions, dividends received
+
+## Management Commentary
+- Investment commentary, outlook, strategy notes
+
+## Earnings Quality Indicators
+- Valuation methodology notes, cost basis vs market value, unrealised gains/losses
+
+IMPORTANT: If the document contains a table of holdings, securities, or positions, extract ALL rows — not just the first few. Include every security name, quantity, value, and relevant details.
 
 Respond with a single JSON object containing:
 1. "pois": an array of POIs (each with category, name, description, output_type, value, citations, confidence)
@@ -131,8 +149,8 @@ class POIExtractor:
         if not chunks:
             raise ValueError(f"No processed chunks found for document {document_id}")
 
-        # Prepare document text (use full context per requirements)
-        # Group chunks by page for better context
+        # Build full document context from all chunks (up to 150K chars)
+        MAX_EXTRACTION_CHARS = 150000
         pages_text = {}
         for chunk in chunks:
             page = chunk.page_number or 0
@@ -140,11 +158,19 @@ class POIExtractor:
                 pages_text[page] = []
             pages_text[page].append(chunk.content)
 
-        # Build document context
         doc_context = []
+        total_chars = 0
         for page_num in sorted(pages_text.keys()):
             page_content = "\n".join(pages_text[page_num])
+            if total_chars + len(page_content) > MAX_EXTRACTION_CHARS:
+                remaining = len([p for p in sorted(pages_text.keys()) if p > page_num])
+                doc_context.append(
+                    f"\n[Note: {remaining} additional pages omitted due to length. "
+                    f"Key data may appear in omitted pages.]"
+                )
+                break
             doc_context.append(f"[Page {page_num}]\n{page_content}")
+            total_chars += len(page_content)
 
         full_context = "\n\n".join(doc_context)
 
@@ -177,16 +203,16 @@ class POIExtractor:
             messages = [
                 {
                     "role": "user",
-                    "content": f"""Analyze this earnings report and extract all Points of Interest.
+                    "content": f"""Analyze this document and extract all Points of Interest.
 
-Company: {document.company_name}
+Company/Entity: {document.company_name}
 Ticker: {document.company_ticker or 'N/A'}
 Reporting Period: {document.reporting_period or 'N/A'}
 
 Document Content:
-{full_context[:50000]}  # Truncate if too long
+{full_context}
 
-Please extract all relevant POIs following the specified format.""",
+Please extract all relevant POIs following the specified format. Only use entity names that appear verbatim in the document.""",
                 }
             ]
 
@@ -194,7 +220,8 @@ Please extract all relevant POIs following the specified format.""",
                 messages=messages,
                 model=model,
                 system_prompt=POI_EXTRACTION_PROMPT,
-                temperature=0.3,  # Lower temperature for factual extraction
+                temperature=0.3,
+                max_tokens=16384,
             )
 
             # Parse single response: pois + executive_summary

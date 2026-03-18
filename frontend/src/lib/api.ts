@@ -290,7 +290,7 @@ export const chatApi = {
   sendMessageStream: async (
     sessionId: number,
     content: string,
-    model: string = 'llama-4',
+    model: string = 'deepseek-v3.1',
     onChunk: (chunk: string) => void,
     onDone?: () => void,
     onError?: (error: string) => void
@@ -355,7 +355,7 @@ export const chatApi = {
   quickChat: async (
     documentId: number,
     content: string,
-    model: string = 'llama-4'
+    model: string = 'deepseek-v3.1'
   ): Promise<ChatResponse> => {
     try {
       const response = await api.post(
@@ -372,7 +372,7 @@ export const chatApi = {
   quickChatMulti: async (
     documentIds: number[],
     content: string,
-    model: string = 'llama-4'
+    model: string = 'deepseek-v3.1'
   ): Promise<ChatResponse> => {
     try {
       const response = await api.post('/chat/quick-multi', {

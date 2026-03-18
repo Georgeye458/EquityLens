@@ -14,10 +14,15 @@ from app.services.vector_store import vector_store
 
 logger = logging.getLogger(__name__)
 
-# Chat system prompt emphasizing full document access and multi-document support
-CHAT_SYSTEM_PROMPT = """You are EquityLens, an AI assistant specialized in analyzing earnings reports and financial documents.
+CHAT_SYSTEM_PROMPT = """You are EquityLens, an AI assistant specialized in analyzing financial documents including earnings reports, portfolio valuations, custodian statements, investor letters, and investment reports.
 
 CRITICAL: You have access to the FULL source documents through the provided context. Your responses should be based on the complete document content, not just pre-extracted summaries.
+
+ENTITY ACCURACY (MANDATORY):
+- Only reference company names, fund names, tickers, and entity names that appear VERBATIM in the provided document context.
+- NEVER substitute, infer, or replace entity names with similar or better-known names.
+- If an entity is called "EFM Group" in the document, use "EFM Group" — do NOT replace it with "FMG" or "Fortescue."
+- If an entity is called "ParaFi" in the document, use "ParaFi" — do NOT replace it with a more well-known company.
 
 Guidelines:
 1. Answer questions thoroughly using information from the provided document chunks
@@ -31,6 +36,7 @@ Guidelines:
 9. Show your working for all calculations (margins, ratios, growth rates). For example: "EBITDA margin = $500M / $2,000M = 25.0%"
 10. Label periods with the actual reporting period names from the document (e.g., FY24, FY23), not generic labels
 11. Double-check arithmetic: verify growth rates match absolute values, ratios match their components
+12. For portfolio/valuation documents: extract ALL holdings, positions, or securities when asked — do not summarise or truncate lists
 
 IMPORTANT: When citing, use the exact document label from the context including the ID tag:
 - Use [Document Name {ID:X} - Page Y] format exactly as shown in context headers
@@ -247,15 +253,14 @@ class ChatService:
                 db=db,
                 query=user_message,
                 document_id=document_ids[0],
-                top_k=20,  # Increased for comprehensive financial analysis coverage
+                top_k=20,
             )
         else:
-            # Search across multiple documents
             retrieved = await vector_store.search_multiple_documents(
                 db=db,
                 query=user_message,
                 document_ids=document_ids,
-                top_k=25,  # More chunks when searching multiple docs
+                top_k=40,
             )
 
         # Build context from retrieved chunks with document identifiers (including ID for reliable matching)
@@ -317,13 +322,13 @@ Question: {user_message}
 Please provide a thorough answer with citations using the exact document labels from the context headers (including {{ID:X}} if present).""",
         })
 
-        # Generate response (with max_tokens to prevent runaway responses and timeouts)
+        # Generate response
         raw_response = await scx_client.chat_completion(
             messages=messages,
             model=model,
             system_prompt=CHAT_SYSTEM_PROMPT,
-            temperature=0.1,  # Low temperature for accurate financial data extraction
-            max_tokens=12288,  # Large limit to accommodate comprehensive tables and analysis
+            temperature=0.1,
+            max_tokens=16384,
         )
         
         # Strip <think> tags from DeepSeek-R1 responses
@@ -403,15 +408,14 @@ Please provide a thorough answer with citations using the exact document labels 
                 db=db,
                 query=user_message,
                 document_id=document_ids[0],
-                top_k=20,  # Increased for comprehensive financial analysis coverage
+                top_k=20,
             )
         else:
-            # Search across multiple documents
             retrieved = await vector_store.search_multiple_documents(
                 db=db,
                 query=user_message,
                 document_ids=document_ids,
-                top_k=25,  # More chunks when searching multiple docs
+                top_k=40,
             )
         
         logger.info(f"Chat stream: retrieval took {time.time() - retrieval_start:.3f}s")
@@ -496,8 +500,8 @@ Please provide a thorough answer with citations using the exact document labels 
             messages=messages,
             model=model,
             system_prompt=CHAT_SYSTEM_PROMPT,
-            temperature=0.1,  # Low temperature for accurate financial data extraction
-            max_tokens=12288,  # Large limit to accommodate comprehensive tables and analysis
+            temperature=0.1,
+            max_tokens=16384,
         ):
             full_response += chunk
             buffer += chunk

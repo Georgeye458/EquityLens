@@ -77,7 +77,7 @@ export function useChat(): UseChatReturn {
     }
   }, []);
 
-  const sendMessage = useCallback(async (content: string, model: string = 'llama-4') => {
+  const sendMessage = useCallback(async (content: string, model: string = 'deepseek-v3.1') => {
     if (!session) {
       setError('No active session');
       return;

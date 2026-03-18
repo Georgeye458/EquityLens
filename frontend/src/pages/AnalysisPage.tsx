@@ -40,7 +40,7 @@ export default function AnalysisPage() {
     fetchCategories,
   } = useAnalysis();
 
-  const [selectedModel, setSelectedModel] = useState('llama-4');
+  const [selectedModel, setSelectedModel] = useState('deepseek-v3.1');
   
   // Handle citation click - open PDF viewer at cited page
   const handleCitationClick = (citation: Citation) => {
@@ -111,8 +111,8 @@ export default function AnalysisPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
                   <SelectItem value="deepseek-v3.1">DeepSeek V3.1 (Detailed)</SelectItem>
+                  <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
                   <SelectItem value="gpt-oss-120b">GPT OSS 120B</SelectItem>
                   <SelectItem value="magpie">Magpie (AU Sovereign)</SelectItem>
                 </SelectContent>

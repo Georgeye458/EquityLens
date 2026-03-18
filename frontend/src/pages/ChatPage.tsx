@@ -40,7 +40,7 @@ export default function ChatPage() {
     clearError,
   } = useChat();
 
-  const [selectedModel, setSelectedModel] = useState('llama-4');
+  const [selectedModel, setSelectedModel] = useState('deepseek-v3.1');
 
   // Handle citation click - open PDF viewer overlay at the cited page
   const handleCitationClick = (citation: CitationDetail) => {
@@ -120,12 +120,12 @@ export default function ChatPage() {
             
             <div className="flex items-center space-x-3">
               <Select value={selectedModel} onValueChange={setSelectedModel}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[200px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
                   <SelectItem value="deepseek-v3.1">DeepSeek V3.1 (Detailed)</SelectItem>
+                  <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
                   <SelectItem value="gpt-oss-120b">GPT OSS 120B</SelectItem>
                   <SelectItem value="magpie">Magpie (AU Sovereign)</SelectItem>
                 </SelectContent>
