@@ -176,7 +176,7 @@ export const documentsApi = {
 
 // Analysis API
 export const analysisApi = {
-  start: async (documentId: number, model: string = 'DeepSeek-V3.1'): Promise<{
+  start: async (documentId: number, model: string = 'MiniMax-M2.5'): Promise<{
     id: number;
     status: string;
   }> => {
@@ -290,7 +290,7 @@ export const chatApi = {
   sendMessageStream: async (
     sessionId: number,
     content: string,
-    model: string = 'DeepSeek-V3.1',
+    model: string = 'MiniMax-M2.5',
     onChunk: (chunk: string) => void,
     onDone?: () => void,
     onError?: (error: string) => void
@@ -355,7 +355,7 @@ export const chatApi = {
   quickChat: async (
     documentId: number,
     content: string,
-    model: string = 'DeepSeek-V3.1'
+    model: string = 'MiniMax-M2.5'
   ): Promise<ChatResponse> => {
     try {
       const response = await api.post(
@@ -372,7 +372,7 @@ export const chatApi = {
   quickChatMulti: async (
     documentIds: number[],
     content: string,
-    model: string = 'DeepSeek-V3.1'
+    model: string = 'MiniMax-M2.5'
   ): Promise<ChatResponse> => {
     try {
       const response = await api.post('/chat/quick-multi', {
@@ -410,7 +410,7 @@ export const chatApi = {
 export const reportsApi = {
   generate: async (
     documentId: number,
-    model: string = 'DeepSeek-V3.1'
+    model: string = 'MiniMax-M2.5'
   ): Promise<ReportSummary> => {
     try {
       const response = await api.post(`/reports/${documentId}/generate`, {

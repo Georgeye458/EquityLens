@@ -70,7 +70,7 @@ export function useAnalysis(): UseAnalysisReturn {
     { enabled: pollingAnalysisId !== null, interval: 3000 }
   );
 
-  const startAnalysis = useCallback(async (documentId: number, model: string = 'DeepSeek-V3.1') => {
+  const startAnalysis = useCallback(async (documentId: number, model: string = 'MiniMax-M2.5') => {
     setIsAnalyzing(true);
     setError(null);
     setStatusMessage('Extracting key points and generating summary…');
