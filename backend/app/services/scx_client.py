@@ -40,7 +40,7 @@ class SCXClient:
 
         Args:
             messages: List of message dictionaries with 'role' and 'content'
-            model: Model to use (defaults to llama-4)
+            model: Model to use (defaults to MiniMax-M2.5)
             temperature: Sampling temperature
             max_tokens: Maximum tokens in response
             system_prompt: Optional system prompt to prepend
@@ -116,7 +116,7 @@ class SCXClient:
 
         Args:
             messages: List of message dictionaries with 'role' and 'content'
-            model: Model to use (defaults to llama-4)
+            model: Model to use (defaults to MiniMax-M2.5)
             temperature: Sampling temperature
             max_tokens: Maximum tokens in response
             system_prompt: Optional system prompt to prepend

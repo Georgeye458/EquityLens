@@ -211,7 +211,7 @@ class ChatService:
         db: AsyncSession,
         session_id: int,
         user_message: str,
-        model: str = "llama-4",
+        model: str = "MiniMax-M2.5",
     ) -> Tuple[ChatMessage, ChatMessage]:
         """
         Send a user message and get AI response.
@@ -358,7 +358,7 @@ Please provide a thorough answer with citations using the exact document labels 
         db: AsyncSession,
         session_id: int,
         user_message: str,
-        model: str = "llama-4",
+        model: str = "MiniMax-M2.5",
     ) -> AsyncIterator[str]:
         """
         Send a user message and stream AI response.

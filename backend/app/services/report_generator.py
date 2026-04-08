@@ -41,7 +41,7 @@ class ReportGenerator:
         self,
         db: AsyncSession,
         document_id: int,
-        model: str = "llama-4",
+        model: str = "MiniMax-M2.5",
     ) -> Report:
         """
         Generate a full analysis report for a document.

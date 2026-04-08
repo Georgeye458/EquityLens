@@ -56,7 +56,7 @@ export function useReport(): UseReportReturn {
     { enabled: pollingDocumentId !== null, interval: 5000 } // Longer interval for report generation
   );
 
-  const generateReport = useCallback(async (documentId: number, model: string = 'llama-4') => {
+  const generateReport = useCallback(async (documentId: number, model: string = 'MiniMax-M2.5') => {
     setIsGenerating(true);
     setError(null);
 

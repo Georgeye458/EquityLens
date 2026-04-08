@@ -91,7 +91,7 @@ class ReportSummary(BaseModel):
 
 class ReportGenerateRequest(BaseModel):
     """Request schema for generating a report."""
-    model: Optional[str] = "llama-4"
+    model: Optional[str] = "MiniMax-M2.5"
 
 
 class ReportStatusResponse(BaseModel):

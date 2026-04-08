@@ -40,7 +40,7 @@ async def run_analysis_background(document_id: int, model: str):
 async def start_analysis(
     document_id: int,
     background_tasks: BackgroundTasks,
-    model: str = "llama-4",
+    model: str = "MiniMax-M2.5",
     db: AsyncSession = Depends(get_db),
 ):
     """

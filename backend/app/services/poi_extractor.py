@@ -118,7 +118,7 @@ class POIExtractor:
         self,
         db: AsyncSession,
         document_id: int,
-        model: str = "llama-4",
+        model: str = "MiniMax-M2.5",
     ) -> Analysis:
         """
         Extract POIs from a document.
