@@ -60,13 +60,10 @@ export default function ChatPage() {
       // Preload cache in background (makes first message instant!)
       chatApi.preloadCache(documentId);
       
-      loadDocumentSessions(documentId).then((sessions) => {
-        if (sessions.length === 0) {
-          createSession(documentId);
-        }
-      });
+      // Always create a new session when opening chat (don't load existing history)
+      createSession(documentId);
     }
-  }, [id, selectDocument, loadDocumentSessions, createSession]);
+  }, [id, selectDocument, createSession]);
 
   const handleSendMessage = async (content: string) => {
     await sendMessage(content, selectedModel);
