@@ -35,7 +35,6 @@ export default function ChatPage() {
     isSending,
     error,
     createSession,
-    loadDocumentSessions,
     sendMessage,
     clearError,
   } = useChat();
