@@ -69,7 +69,7 @@ heroku addons:create bucketeer:hobbyist -a equitylens-api
 # Set environment variables
 heroku config:set SCX_API_KEY=your-scx-api-key -a equitylens-api
 heroku config:set SCX_API_BASE_URL=https://api.scx.ai/v1 -a equitylens-api
-heroku config:set SCX_MODEL=DeepSeek-R1-0528 -a equitylens-api
+heroku config:set SCX_MODEL=gpt-oss-120b -a equitylens-api
 heroku config:set SCX_EMBEDDING_MODEL=E5-Mistral-7B-Instruct -a equitylens-api
 heroku config:set SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(32))") -a equitylens-api
 heroku config:set ALLOWED_ORIGINS=https://equitylens-frontend-e430b9f9b114.herokuapp.com -a equitylens-api

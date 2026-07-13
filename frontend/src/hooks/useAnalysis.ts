@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { Analysis, POIsByCategory } from '../types';
 import { analysisApi } from '../lib/api';
 import { usePolling } from './usePolling';
+import { DEFAULT_MODEL } from '../lib/models';
 
 interface UseAnalysisReturn {
   analysis: Analysis | null;
@@ -70,7 +71,7 @@ export function useAnalysis(): UseAnalysisReturn {
     { enabled: pollingAnalysisId !== null, interval: 3000 }
   );
 
-  const startAnalysis = useCallback(async (documentId: number, model: string = 'MiniMax-M2.5') => {
+  const startAnalysis = useCallback(async (documentId: number, model: string = DEFAULT_MODEL) => {
     setIsAnalyzing(true);
     setError(null);
     setStatusMessage('Extracting key points and generating summary…');

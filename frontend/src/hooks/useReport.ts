@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { Report, ReportSummary } from '../types';
 import { reportsApi } from '../lib/api';
 import { usePolling } from './usePolling';
+import { DEFAULT_MODEL } from '../lib/models';
 
 interface UseReportReturn {
   report: Report | null;
@@ -56,7 +57,7 @@ export function useReport(): UseReportReturn {
     { enabled: pollingDocumentId !== null, interval: 5000 } // Longer interval for report generation
   );
 
-  const generateReport = useCallback(async (documentId: number, model: string = 'MiniMax-M2.5') => {
+  const generateReport = useCallback(async (documentId: number, model: string = DEFAULT_MODEL) => {
     setIsGenerating(true);
     setError(null);
 

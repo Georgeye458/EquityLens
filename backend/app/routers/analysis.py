@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.database import get_db
 from app.services.poi_extractor import poi_extractor
+from app.models_catalog import DEFAULT_CHAT_MODEL
 from app.models.document import Document, ProcessingStatus
 from app.models.analysis import (
     Analysis,
@@ -40,7 +41,7 @@ async def run_analysis_background(document_id: int, model: str):
 async def start_analysis(
     document_id: int,
     background_tasks: BackgroundTasks,
-    model: str = "MiniMax-M2.5",
+    model: str = DEFAULT_CHAT_MODEL,
     db: AsyncSession = Depends(get_db),
 ):
     """

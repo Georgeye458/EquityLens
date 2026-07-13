@@ -12,12 +12,14 @@ from app.models.document import Document, ProcessingStatus
 from app.models.report import Report, ReportStatus
 from app.services.scx_client import scx_client
 from app.services.vector_store import vector_store
+from app.models_catalog import DEFAULT_CHAT_MODEL, max_input_chars
 from app.prompts.master_analysis import build_master_prompt, MASTER_ANALYSIS_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# Maximum characters to include in prompt (approximately 100k tokens worth)
-MAX_DOCUMENT_CHARS = 150000
+# Output tokens requested for the full markdown report. Clamped per-model by
+# the SCX client (models with a lower max_output_length return less).
+REPORT_OUTPUT_TOKENS = 16384
 
 # Targeted queries for retrieval-based context - aligned to each master prompt section
 # 8 focused queries for comprehensive coverage of all financial analysis areas
@@ -41,7 +43,7 @@ class ReportGenerator:
         self,
         db: AsyncSession,
         document_id: int,
-        model: str = "MiniMax-M2.5",
+        model: str = DEFAULT_CHAT_MODEL,
     ) -> Report:
         """
         Generate a full analysis report for a document.
@@ -81,8 +83,14 @@ class ReportGenerator:
         await db.refresh(report)
         
         try:
+            # Budget input characters against the selected model's context
+            # window (leaving room for the reserved report output tokens).
+            max_document_chars = max_input_chars(model, REPORT_OUTPUT_TOKENS)
+
             # Get all document chunks ordered by page (returns content, and optional truncation info)
-            document_content, pages_included, pages_skipped = await self._get_document_content(db, document_id)
+            document_content, pages_included, pages_skipped = await self._get_document_content(
+                db, document_id, max_document_chars
+            )
             
             # Build the master prompt
             prompt = build_master_prompt(
@@ -104,6 +112,7 @@ class ReportGenerator:
                 model=model,
                 temperature=0.1,  # Very low temperature for precise financial data extraction
                 system_prompt=MASTER_ANALYSIS_SYSTEM_PROMPT,
+                max_tokens=REPORT_OUTPUT_TOKENS,
             )
             
             # Calculate processing time
@@ -139,14 +148,15 @@ class ReportGenerator:
         self,
         db: AsyncSession,
         document_id: int,
+        max_document_chars: int,
     ) -> tuple[str, int, int]:
         """
         Get full document content for comprehensive report generation.
         
         Loads ALL chunks ordered by page and chunk_index to give the model
         complete document context. This ensures no financial data is missed
-        due to retrieval gaps. Falls back to retrieval-based approach only
-        if the full document exceeds MAX_DOCUMENT_CHARS.
+        due to retrieval gaps. Pages beyond ``max_document_chars`` (a
+        model-aware budget) are omitted with a note.
 
         Returns:
             Tuple of (content_string, pages_included, pages_skipped)
@@ -182,7 +192,7 @@ class ReportGenerator:
         for page_num in sorted_page_nums:
             page_content = "\n".join(pages[page_num])
 
-            if total_chars + len(page_content) > MAX_DOCUMENT_CHARS:
+            if total_chars + len(page_content) > max_document_chars:
                 remaining_pages = len([p for p in sorted_page_nums if p > page_num])
                 content_parts.append(
                     f"\n\n[Additional {remaining_pages} pages omitted due to length limits. "

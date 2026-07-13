@@ -115,8 +115,8 @@ This is the fundamental differentiator from failed prior implementations. The tw
 
 EquityLens leverages the SCX.ai platform (Southern Cross AI) for all AI capabilities. Key advantages:
 
-- **Unlimited Tokens:** No token limits across all available models - critical for processing large earnings documents (200+ pages)
-- **Multiple LLM Options:** Access to Llama 4, DeepSeek V3.1, GPT OSS 120B, and Magpie (Australian sovereign model)
+- **Large Context Windows:** Models offer 33K–197K token context windows - suitable for processing large earnings documents (the app budgets document input per model)
+- **Multiple LLM Options:** Access to GPT-OSS 120B, MAGPiE (Australian sovereign), MiniMax M2.7, DeepSeek V3.1, Gemma 4, Llama 4 Maverick, Llama 3.3 70B, SCX Coder, and Qwen3
 - **Embedding Models:** RAG-optimised embedding models for high-quality financial document retrieval
 - **OpenAI Compatibility:** OpenAI-compatible API endpoints - use existing OpenAI SDK with different base URL
 
@@ -137,7 +137,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="llama-4",
+    model="gpt-oss-120b",
     messages=[{"role": "user", "content": "Analyze this earnings report..."}]
 )
 ```
@@ -149,14 +149,23 @@ response = client.chat.completions.create(
 
 ### 4.3 Available Models
 
-The following models are available via SCX.ai (unlimited tokens for all):
+The following chat models are available via SCX.ai. Each has a fixed context
+window and output-token cap; the application clamps output requests and budgets
+document input per model (see `backend/app/models_catalog.py`).
 
-| Model | Provider | Notes |
-|-------|----------|-------|
-| `llama-4` | Meta | Latest Llama model - recommended for general use |
-| `deepseek-v3.1` | DeepSeek | Strong reasoning and coding capabilities |
-| `gpt-oss-120b` | OpenAI | Open-source GPT variant |
-| `magpie` | SCX.ai | Experimental Australian sovereign model |
+| Model | Provider | Context | Max output | Notes |
+|-------|----------|---------|-----------|-------|
+| `gpt-oss-120b` | OpenAI | 131K | 131K | Default; large output, reasoning + tools |
+| `MAGPiE` | SCX.ai | 131K | 131K | Australian sovereign model, large output |
+| `MiniMax-M2.7` | MiniMax | 192K | 4K | Largest context window |
+| `DeepSeek-V3.1` | DeepSeek | 131K | 7K | Strong reasoning and coding |
+| `gemma-4-31B-it` | Google | 131K | 8K | Multimodal (text + image) |
+| `Llama-4-Maverick-17B-128E-Instruct` | Meta | 131K | 4K | Multimodal (text + image) |
+| `Meta-Llama-3.3-70B-Instruct` | Meta | 131K | 3K | Fast general-purpose text |
+| `coder` | SCX.ai | 196K | 4K | Coding-optimised, large context |
+| `Qwen3-32B` | Alibaba | 33K | 4K | Compact, 119-language support |
+
+Embedding model: `E5-Mistral-7B-Instruct` (4096 dims, 33K context).
 
 > **Note:** Refer to https://platform.scx.ai/docs/models for the current list of available models and embedding options.
 
@@ -164,10 +173,11 @@ The following models are available via SCX.ai (unlimited tokens for all):
 
 | Use Case | Recommended Model | Rationale |
 |----------|-------------------|-----------|
-| Initial POI Extraction | `llama-4` | Fast, accurate, good for structured extraction tasks |
-| Chat Responses | `llama-4` | Good balance of quality and speed for interactive use |
-| Complex Analysis | `deepseek-v3.1` | Strong reasoning for nuanced financial interpretation |
-| Document Embeddings | (See SCX.ai docs) | Use embedding models available via /embeddings endpoint |
+| Initial POI Extraction | `gpt-oss-120b` | 131K output cap fits large structured POI JSON without truncation |
+| Chat Responses | `gpt-oss-120b` | Strong reasoning with ample output headroom |
+| Complex Analysis | `DeepSeek-V3.1` | Strong reasoning for nuanced financial interpretation |
+| Largest Documents | `MiniMax-M2.7` / `coder` | 192K–197K context windows for very long filings |
+| Document Embeddings | `E5-Mistral-7B-Instruct` | Only embedding model available via /embeddings endpoint |
 
 ---
 

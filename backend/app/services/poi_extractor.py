@@ -11,8 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.analysis import Analysis, PointOfInterest, POICategory
 from app.models.document import Document
 from app.services.scx_client import scx_client
+from app.models_catalog import DEFAULT_CHAT_MODEL, max_input_chars
 
 logger = logging.getLogger(__name__)
+
+# Output tokens requested for the combined POI + executive-summary JSON.
+# Clamped per-model by the SCX client (some models cap lower).
+POI_OUTPUT_TOKENS = 16384
 
 # Master prompt for POI extraction + executive summary in one response
 POI_EXTRACTION_PROMPT = """You are an expert financial analyst assistant. Your task is to extract key Points of Interest (POIs) from financial documents AND write a concise executive summary in a single response.
@@ -118,7 +123,7 @@ class POIExtractor:
         self,
         db: AsyncSession,
         document_id: int,
-        model: str = "MiniMax-M2.5",
+        model: str = DEFAULT_CHAT_MODEL,
     ) -> Analysis:
         """
         Extract POIs from a document.
@@ -149,8 +154,10 @@ class POIExtractor:
         if not chunks:
             raise ValueError(f"No processed chunks found for document {document_id}")
 
-        # Build full document context from all chunks (up to 150K chars)
-        MAX_EXTRACTION_CHARS = 150000
+        # Build full document context from all chunks. The character budget is
+        # derived from the selected model's context window minus the reserved
+        # output tokens, so we never overflow smaller-context models.
+        MAX_EXTRACTION_CHARS = max_input_chars(model, POI_OUTPUT_TOKENS)
         pages_text = {}
         for chunk in chunks:
             page = chunk.page_number or 0
@@ -221,7 +228,7 @@ Please extract all relevant POIs following the specified format. Only use entity
                 model=model,
                 system_prompt=POI_EXTRACTION_PROMPT,
                 temperature=0.3,
-                max_tokens=16384,
+                max_tokens=POI_OUTPUT_TOKENS,
             )
 
             # Parse single response: pois + executive_summary

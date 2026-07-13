@@ -16,6 +16,7 @@ import { useDocuments } from '../context/DocumentContext';
 import { usePDFViewer } from '../context/PDFViewerContext';
 import { useChat } from '../hooks/useChat';
 import { chatApi } from '../lib/api';
+import { SCX_MODELS, DEFAULT_MODEL } from '../lib/models';
 import ChatInterface from '../components/ChatInterface';
 import PDFViewerPanel from '../components/PDFViewerPanel';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -68,7 +69,7 @@ export default function MultiDocChatPage() {
 
   const { openPDFViewer } = usePDFViewer();
   const [isInitialized, setIsInitialized] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('MiniMax-M2.5');
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
 
   // Handle citation click - open PDF viewer overlay at the cited page
   const handleCitationClick = (citation: CitationDetail) => {
@@ -171,11 +172,11 @@ export default function MultiDocChatPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="MiniMax-M2.5">MiniMax M2.5 (Best)</SelectItem>
-              <SelectItem value="DeepSeek-V3.1">DeepSeek V3.1</SelectItem>
-              <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
-              <SelectItem value="gpt-oss-120b">GPT OSS 120B</SelectItem>
-              <SelectItem value="MAGPiE">Magpie (AU Sovereign)</SelectItem>
+              {SCX_MODELS.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Button

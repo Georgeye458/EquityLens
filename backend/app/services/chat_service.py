@@ -11,6 +11,10 @@ from app.models.document import Document
 from app.models.chat import ChatSession, ChatMessage, ChatMessageResponse, CitationDetail
 from app.services.scx_client import scx_client
 from app.services.vector_store import vector_store
+from app.models_catalog import DEFAULT_CHAT_MODEL
+
+# Output tokens requested for chat replies. Clamped per-model by the SCX client.
+CHAT_OUTPUT_TOKENS = 16384
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +215,7 @@ class ChatService:
         db: AsyncSession,
         session_id: int,
         user_message: str,
-        model: str = "MiniMax-M2.5",
+        model: str = DEFAULT_CHAT_MODEL,
     ) -> Tuple[ChatMessage, ChatMessage]:
         """
         Send a user message and get AI response.
@@ -328,7 +332,7 @@ Please provide a thorough answer with citations using the exact document labels 
             model=model,
             system_prompt=CHAT_SYSTEM_PROMPT,
             temperature=0.1,
-            max_tokens=16384,
+            max_tokens=CHAT_OUTPUT_TOKENS,
         )
         
         # Strip <think> tags from DeepSeek-R1 responses
@@ -358,7 +362,7 @@ Please provide a thorough answer with citations using the exact document labels 
         db: AsyncSession,
         session_id: int,
         user_message: str,
-        model: str = "MiniMax-M2.5",
+        model: str = DEFAULT_CHAT_MODEL,
     ) -> AsyncIterator[str]:
         """
         Send a user message and stream AI response.
@@ -501,7 +505,7 @@ Please provide a thorough answer with citations using the exact document labels 
             model=model,
             system_prompt=CHAT_SYSTEM_PROMPT,
             temperature=0.1,
-            max_tokens=16384,
+            max_tokens=CHAT_OUTPUT_TOKENS,
         ):
             full_response += chunk
             buffer += chunk

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { ChatSession, ChatMessage } from '../types';
 import { chatApi } from '../lib/api';
+import { DEFAULT_MODEL } from '../lib/models';
 
 interface UseChatReturn {
   session: ChatSession | null;
@@ -77,7 +78,7 @@ export function useChat(): UseChatReturn {
     }
   }, []);
 
-  const sendMessage = useCallback(async (content: string, model: string = 'MiniMax-M2.5') => {
+  const sendMessage = useCallback(async (content: string, model: string = DEFAULT_MODEL) => {
     if (!session) {
       setError('No active session');
       return;

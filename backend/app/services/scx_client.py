@@ -7,6 +7,7 @@ from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import settings
+from app.models_catalog import effective_max_output_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +41,19 @@ class SCXClient:
 
         Args:
             messages: List of message dictionaries with 'role' and 'content'
-            model: Model to use (defaults to MiniMax-M2.5)
+            model: Model to use (defaults to the configured SCX model)
             temperature: Sampling temperature
-            max_tokens: Maximum tokens in response
+            max_tokens: Requested max output tokens; clamped to the model's cap
             system_prompt: Optional system prompt to prepend
 
         Returns:
             Generated text response
         """
         model = model or self.default_model
+
+        # Clamp the requested output to the model's real max_output_length so
+        # we never ask for more tokens than the model can return.
+        max_tokens = effective_max_output_tokens(model, max_tokens)
 
         # Prepend system prompt if provided
         if system_prompt:
@@ -116,9 +121,9 @@ class SCXClient:
 
         Args:
             messages: List of message dictionaries with 'role' and 'content'
-            model: Model to use (defaults to MiniMax-M2.5)
+            model: Model to use (defaults to the configured SCX model)
             temperature: Sampling temperature
-            max_tokens: Maximum tokens in response
+            max_tokens: Requested max output tokens; clamped to the model's cap
             system_prompt: Optional system prompt to prepend
             max_retries: Maximum number of retry attempts
 
@@ -128,6 +133,9 @@ class SCXClient:
         import asyncio
         
         model = model or self.default_model
+
+        # Clamp the requested output to the model's real max_output_length.
+        max_tokens = effective_max_output_tokens(model, max_tokens)
 
         # Prepend system prompt if provided
         if system_prompt:

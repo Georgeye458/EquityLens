@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SCX_MODELS, DEFAULT_MODEL } from '../lib/models';
 
 export default function ChatPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,7 +40,7 @@ export default function ChatPage() {
     clearError,
   } = useChat();
 
-  const [selectedModel, setSelectedModel] = useState('MiniMax-M2.5');
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
 
   // Handle citation click - open PDF viewer overlay at the cited page
   const handleCitationClick = (citation: CitationDetail) => {
@@ -120,11 +121,11 @@ export default function ChatPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="MiniMax-M2.5">MiniMax M2.5 (Best)</SelectItem>
-                  <SelectItem value="DeepSeek-V3.1">DeepSeek V3.1</SelectItem>
-                  <SelectItem value="llama-4">Llama 4 (Fast)</SelectItem>
-                  <SelectItem value="gpt-oss-120b">GPT OSS 120B</SelectItem>
-                  <SelectItem value="MAGPiE">Magpie (AU Sovereign)</SelectItem>
+                  {SCX_MODELS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               

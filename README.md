@@ -14,7 +14,7 @@ EquityLens ingests earnings documents (annual reports, half-year results, ASX an
 - **POI Extraction**: Automatically extract financial metrics, segment analysis, cash flow, and management commentary
 - **Full Document Chat**: Ask questions about the entire document, not just extracted POIs
 - **Page Citations**: Every insight is linked to its source page for traceability
-- **Unlimited Tokens**: Powered by SCX.ai with unlimited token access
+- **Large-Context Models**: Powered by SCX.ai; input and output tokens are budgeted per model against each model's context window and output cap
 
 ## Architecture
 
@@ -154,7 +154,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ```env
 SCX_API_KEY=your-scx-api-key
 SCX_API_BASE_URL=https://api.scx.ai/v1
-SCX_MODEL=DeepSeek-R1-0528
+SCX_MODEL=gpt-oss-120b
 SCX_EMBEDDING_MODEL=E5-Mistral-7B-Instruct
 DATABASE_URL=postgresql://user:password@localhost:5432/equitylens
 SECRET_KEY=your-secret-key
@@ -190,15 +190,26 @@ VITE_API_URL=http://localhost:8000
 
 ## Available Models (SCX.ai)
 
-| Model | Use Case |
-|-------|----------|
-| `DeepSeek-R1-0528` | Deep reasoning - default for POI extraction and chat |
-| `llama-4` | Fast, accurate for general use |
-| `deepseek-v3.1` | Strong reasoning for complex analysis |
-| `gpt-oss-120b` | Open-source GPT variant |
-| `magpie` | Australian sovereign model |
+Model IDs, context windows and output-token caps are defined once in
+`backend/app/models_catalog.py` (backend) and `frontend/src/lib/models.ts` (UI).
+The SCX client automatically clamps each request's output tokens to the model's
+cap, and document input is budgeted against the model's context window.
 
-> **Default model**: `DeepSeek-R1-0528` is the current default for all analysis and chat operations. Embedding model: `E5-Mistral-7B-Instruct`.
+| Model | Context | Max output | Notes |
+|-------|---------|-----------|-------|
+| `gpt-oss-120b` | 131K | 131K | Default — large output, reasoning + tools |
+| `MAGPiE` | 131K | 131K | Australian sovereign model, large output |
+| `MiniMax-M2.7` | 192K | 4K | Largest context window |
+| `DeepSeek-V3.1` | 131K | 7K | Strong reasoning for complex analysis |
+| `gemma-4-31B-it` | 131K | 8K | Multimodal (text + image) |
+| `Llama-4-Maverick-17B-128E-Instruct` | 131K | 4K | Multimodal (text + image) |
+| `Meta-Llama-3.3-70B-Instruct` | 131K | 3K | Fast general-purpose text |
+| `coder` | 196K | 4K | Coding-optimised, large context |
+| `Qwen3-32B` | 33K | 4K | Compact, 119-language support |
+
+> **Default model**: `gpt-oss-120b` is the default for all analysis and chat
+> operations (replacing the retired `MiniMax-M2.5`). Embedding model:
+> `E5-Mistral-7B-Instruct` (4096 dims, 33K context).
 
 ## Points of Interest (POIs)
 

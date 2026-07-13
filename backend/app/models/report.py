@@ -9,6 +9,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Floa
 from sqlalchemy.orm import relationship
 
 from app.services.database import Base
+from app.models_catalog import DEFAULT_CHAT_MODEL
 
 
 class ReportStatus(str, Enum):
@@ -91,7 +92,7 @@ class ReportSummary(BaseModel):
 
 class ReportGenerateRequest(BaseModel):
     """Request schema for generating a report."""
-    model: Optional[str] = "MiniMax-M2.5"
+    model: Optional[str] = DEFAULT_CHAT_MODEL
 
 
 class ReportStatusResponse(BaseModel):
